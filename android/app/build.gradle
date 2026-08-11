@@ -13,25 +13,33 @@ apply plugin: 'com.android.application'
  * -----------------------------------------------------------------------------------------
  */
 System.print("Loading Android keystore config from: ")
-System.println(System.getenv("ANDROID_KEYSTORE_PROPS"))
+def keystorePropsEnv = System.getenv("ANDROID_KEYSTORE_PROPS")
+System.println(keystorePropsEnv)
 def keystoreProperties = new Properties()
-def keystorePropertiesFile = file(System.getenv("ANDROID_KEYSTORE_PROPS"))
-if (keystorePropertiesFile.exists()) {
-  keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+if (keystorePropsEnv != null && !keystorePropsEnv.isEmpty()) {
+  def keystorePropertiesFile = file(keystorePropsEnv)
+  if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+  }
 }
 
 android {
-  compileSdkVersion rootProject.ext.compileSdkVersion
+  compileSdk rootProject.ext.compileSdkVersion
   namespace "com.github.nicorac.bcrgui"
   defaultConfig {
     applicationId "com.github.nicorac.bcrgui"
-    minSdkVersion rootProject.ext.minSdkVersion
-    targetSdkVersion rootProject.ext.targetSdkVersion
+    minSdk rootProject.ext.minSdkVersion
+    targetSdk rootProject.ext.targetSdkVersion
     // version parts: M = Major, m = minor, b = build
     // -------- MMMmmmbbb
     versionCode 1015002
     versionName "1.15.2"
     testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+    buildFeatures {
+      buildConfig = true
+    }
+
     aaptOptions {
        // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
        // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
@@ -42,10 +50,12 @@ android {
   // signature config (release only)
   signingConfigs {
     release {
-      keyAlias keystoreProperties['keyAlias']
-      keyPassword keystoreProperties['keyPassword']
-      storeFile file(keystoreProperties['storeFile'])
-      storePassword keystoreProperties['storePassword']
+      if (keystoreProperties['keyAlias'] != null) {
+        keyAlias keystoreProperties['keyAlias']
+        keyPassword keystoreProperties['keyPassword']
+        storeFile file(keystoreProperties['storeFile'])
+        storePassword keystoreProperties['storePassword']
+      }
     }
   }
   buildTypes {
@@ -55,18 +65,20 @@ android {
     }
     release {
       minifyEnabled false
-      proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
       signingConfig signingConfigs.release
     }
   }
 
   // change generated apk name for release builds
-  applicationVariants.all { variant ->
-    if (variant.buildType.name == 'release') {
-      variant.outputs.all {
-        outputFileName = "bcr-gui-${defaultConfig.versionName}-${variant.buildType.name}.apk"
+  androidComponents {
+    onVariants(selector().all(), { variant ->
+      if (variant.buildType == 'release') {
+        variant.outputs.forEach { output ->
+          output.outputFileName.set("bcr-gui-${defaultConfig.versionName}-${variant.buildType}.apk")
+        }
       }
-    }
+    })
   }
 
   sourceSets {
