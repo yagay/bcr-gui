@@ -100,18 +100,39 @@
         <ion-card *cdkVirtualFor="let item of items(); let index = index; trackBy: trackByUri"
           class="item"
           [class.selected]="item.selected"
+          [class.child-item]="!isGroupHeader(item)"
         >
           <div>
 
             <!-- card content -->
             <ion-card-header
-              (click)="onItemClick(item);"
+              (click)="onCardClick(item)"
               longPress
               (longPress)="startMultiselection(item)"
             >
-              <ion-card-title class="title">
-                <div class="op-name">{{ item.opName }}</div>
-              </ion-card-title>
+              @if (isGroupHeader(item) || item.selected) {
+                <ion-card-title class="title">
+                  @if (isGroupHeader(item)) {
+                    <div class="header-content">
+                      <div class="op-name">{{ item.opName }}</div>
+                      <div class="header-actions">
+                        <ion-icon
+                          name="play-circle-outline"
+                          (click)="onItemClick(item); $event.stopPropagation()"
+                        />
+                        @if (getGroupCount(item) > 1) {
+                          <ion-badge color="medium" mode="ios">{{ getGroupCount(item) }}</ion-badge>
+                          <ion-icon
+                            [name]="expandedGroupKey() === getGroupKey(item) ? 'chevron-up' : 'chevron-down'"
+                          />
+                        }
+                      </div>
+                    </div>
+                  } @else {
+                    <div class="op-name secondary-text">{{ item.opName }}</div>
+                  }
+                </ion-card-title>
+              }
               <ion-card-subtitle class="left-container subtitle">
                 <app-call-icon class="call-direction-icon" [direction]="item?.direction ?? ''" />
                 <span>{{ item?.date | datetime }}</span>
@@ -128,8 +149,19 @@
 
                   <!-- details -->
                   <div class="details">
-                    @if (item.opName !== item.opNumber) {
-                      <p>{{ 'HOME_REC_PHONE_NUMBER' | translatePipe}}: {{ item.opNumber }}</p>
+                    @if (item.opNumber) {
+                      <p>
+                        {{ 'HOME_REC_PHONE_NUMBER' | translatePipe}}:
+                        @if (isDialableNumber(item)) {
+                          <a
+                            class="phone-link"
+                            [href]="getDialUri(item)"
+                            (click)="$event.stopPropagation()"
+                          >{{ item.opNumber }}</a>
+                        } @else {
+                          {{ item.opNumber }}
+                        }
+                      </p>
                     }
                     <p>{{ 'HOME_REC_TYPE' | translatePipe}}: {{ item.mimeType }}</p>
                     <p>{{ 'HOME_REC_SIZE' | translatePipe}}: {{ item.filesize | filesize }}</p>

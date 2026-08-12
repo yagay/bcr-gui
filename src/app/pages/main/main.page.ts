@@ -4,7 +4,7 @@ import { ActionButton, HeaderComponent } from 'src/app/components/header/header.
 import { VirtualScrollbarComponent } from 'src/app/components/virtual-scrollbar/virtual-scrollbar.component';
 import { LongPressDirective } from 'src/app/directives/long-press.directive';
 import { IonicBundleModule } from 'src/app/IonicBundle.module';
-import { Recording } from 'src/app/models/recording';
+import { Recording, UNKNOWN_NAME_OR_NUMBER } from 'src/app/models/recording';
 import { DatetimePipe } from 'src/app/pipes/datetime.pipe';
 import { FilesizePipe } from 'src/app/pipes/filesize.pipe';
 import { ToHmsPipe } from 'src/app/pipes/to-hms.pipe';
@@ -15,6 +15,7 @@ import { MessageBoxService } from 'src/app/services/message-box.service';
 import { RecordingsService } from 'src/app/services/recordings.service';
 import { SettingsService } from 'src/app/services/settings.service';
 import { filterList } from 'src/app/utils/filterList';
+import { cleanupPhoneNumber, isPhoneNumber } from 'src/app/utils/phoneNumbers';
 import { sortRecordings } from 'src/app/utils/recordings-sorter';
 import { bringIntoView } from 'src/app/utils/scroll';
 import { untilTrue } from 'src/app/utils/waitForAsync';
@@ -74,20 +75,65 @@ export class MainPage implements AfterViewInit {
     return this.items()?.findIndex(i => i === item) ?? -1;
   });
 
-  // filtered items collection
-  protected items = computed<Recording[]>(() => {
-    // filter & sort
-    let filteredItems = filterList(this.recordingsService.recordings(), this.searchValue(), r => `${r.opName} ${r.opNumber}`);
-    filteredItems = sortRecordings(filteredItems, this.settings.recordingsSortMode);
-    // reset selection if item is now missing
+  // Only one contact history can be expanded at a time.
+  protected expandedGroupKey = signal<string | undefined>(undefined);
+
+  // Filtered and sorted recordings before the collapsed contact view is applied.
+  // Playback, multiselection and intent handling must keep using the full list.
+  private sortedItems = computed<Recording[]>(() => {
+    const filteredItems = filterList(
+      this.recordingsService.recordings(),
+      this.searchValue(),
+      r => `${r.opName} ${r.opNumber}`
+    );
+    const sortedItems = sortRecordings(filteredItems, this.settings.recordingsSortMode);
+
+    // Preserve the upstream behavior: a selected recording must be cleared when
+    // it is no longer part of the filtered list.
     untracked(() => {
-      const selItem = this.selectedItem();
-      if (selItem && !filteredItems.includes(selItem)) {
+      const selected = this.selectedItem();
+      if (selected && !sortedItems.includes(selected)) {
         this.clearSelection();
       }
     });
-    // return sorted
-    return filteredItems;
+
+    return sortedItems;
+  });
+
+  // Group metadata is derived without writing to another signal from a computed().
+  protected groups = computed<Map<string, Recording[]>>(() => {
+    const result = new Map<string, Recording[]>();
+
+    for (const recording of this.sortedItems()) {
+      const key = this.getGroupKey(recording);
+      const group = result.get(key) ?? [];
+      group.push(recording);
+      result.set(key, group);
+    }
+
+    // The representative row must always be the latest recording, regardless of
+    // the list sort mode selected in Settings.
+    result.forEach(group => group.sort((a, b) => b.date - a.date));
+    return result;
+  });
+
+  // filtered and grouped items collection
+  protected items = computed<Recording[]>(() => {
+    const finalItems: Recording[] = [];
+
+    // Apply the existing upstream sort setting to each group's representative
+    // recording, then keep every expanded group's history in newest-first order.
+    const headers = Array.from(this.groups().values(), group => group[0]);
+    for (const header of sortRecordings(headers, this.settings.recordingsSortMode)) {
+      const key = this.getGroupKey(header);
+      const group = this.groups().get(key)!;
+      finalItems.push(header);
+      if (this.expandedGroupKey() === key) {
+        finalItems.push(...group.slice(1));
+      }
+    }
+
+    return finalItems;
   });
 
   protected topIndex = 0; // index of top shown recording
@@ -146,11 +192,12 @@ export class MainPage implements AfterViewInit {
     this.clearFilter();
     this.isMultiselect.set(false);
 
-    // find the required filename
-    const playItemIx = this.items().findIndex(i => i.audioUri === viewIntentFilename);
-    if (playItemIx >= 0) {
-
-      const playItem = this.items()[playItemIx];
+    // Find the requested file in the full list and expand its contact first. An
+    // older recording is intentionally absent from the collapsed display list.
+    const playItem = this.sortedItems().find(i => i.audioUri === viewIntentFilename);
+    if (playItem) {
+      this.expandedGroupKey.set(this.getGroupKey(playItem));
+      const playItemIx = this.items().findIndex(i => i === playItem);
 
       // ensure it's visible
       this.scrollViewport()?.scrollToIndex(playItemIx);
@@ -208,7 +255,7 @@ export class MainPage implements AfterViewInit {
   }
 
   getSelectedItems(): Recording[] {
-    return this.items().filter(r => r.selected);
+    return this.sortedItems().filter(r => r.selected);
   }
 
   /**
@@ -225,6 +272,89 @@ export class MainPage implements AfterViewInit {
     this.searchValue.set('');
     this.isSearch.set(false);
     // this.updateFilter();
+  }
+
+  /** Toggle expansion for a contact group. */
+  protected toggleExpand(groupKey: string) {
+    if (this.expandedGroupKey() === groupKey) {
+      const selected = this.selectedItem();
+      if (selected && this.getGroupKey(selected) === groupKey && !this.isGroupHeader(selected)) {
+        this.clearSelection();
+      }
+      this.expandedGroupKey.set(undefined);
+    } else {
+      this.expandedGroupKey.set(groupKey);
+    }
+  }
+
+  protected onCardClick(item: Recording) {
+    const key = this.getGroupKey(item);
+
+    if (!this.isMultiselect() && this.expandedGroupKey() !== key) {
+      this.expandedGroupKey.set(undefined);
+    }
+
+    if (!this.isMultiselect() && this.isGroupHeader(item) && this.getGroupCount(item) > 1) {
+      const isExpanded = this.expandedGroupKey() === key;
+
+      // Switching from an older recording back to the latest one must keep the
+      // history visible. Collapse only when the latest recording is already
+      // selected and the user taps the same contact again.
+      if (!isExpanded || item.selected) {
+        this.toggleExpand(key);
+      }
+
+      this.onItemClick(item);
+    }
+    else {
+      this.onItemClick(item);
+    }
+  }
+
+  /**
+   * Helper to check if a recording is the header of its group
+   */
+  protected isGroupHeader(item: Recording): boolean {
+    return this.groups().get(this.getGroupKey(item))?.[0] === item;
+  }
+
+  protected getGroupCount(item: Recording): number {
+    return this.groups().get(this.getGroupKey(item))?.length ?? 1;
+  }
+
+  protected isDialableNumber(item: Recording): boolean {
+    return isPhoneNumber(item.opNumber);
+  }
+
+  protected getDialUri(item: Recording): string {
+    return `tel:${cleanupPhoneNumber(item.opNumber)}`;
+  }
+
+  protected getGroupKey(item: Recording): string {
+    // BCR metadata exposes the contact name but not an Android contact ID. Use
+    // the display name when it is a real name so calls to multiple numbers of
+    // the same contact are presented in one group.
+    const name = item.opName.trim().normalize('NFKC').replace(/\s+/g, ' ').toLocaleLowerCase();
+    if (name && name !== UNKNOWN_NAME_OR_NUMBER && !isPhoneNumber(item.opName)) {
+      return `name:${name}`;
+    }
+
+    let number = cleanupPhoneNumber(item.opNumber);
+    const prefix = cleanupPhoneNumber(this.settings.defaultCountryPrefix);
+
+    // Reuse the existing country-prefix setting so local and international
+    // representations of the same number collapse into one contact group.
+    if (prefix && number.startsWith('0')) {
+      number = prefix + number.substring(1);
+    }
+
+    if (number) {
+      return `number:${number}`;
+    }
+
+    // Truly unknown/private callers must remain separate; otherwise every hidden
+    // call would be incorrectly merged into a single contact.
+    return `recording:${item.audioUri}`;
   }
 
   /**
@@ -415,7 +545,7 @@ export class MainPage implements AfterViewInit {
    */
   async selectAll() {
     this.isMultiselect.set(true);
-    this.items().forEach(i => i.selected = true); // select all VISIBLE items
+    this.sortedItems().forEach(i => i.selected = true);
   }
 
   /**
@@ -488,10 +618,11 @@ Duration: ${this.toHms.transform(item.duration)}
    */
   protected onSkip(direction: SkipDirection) {
     // find first selected item index
-    const selectedItemIndex = this.items().findIndex(i => i.selected);
+    const selectedItemIndex = this.sortedItems().findIndex(i => i.selected);
     if (selectedItemIndex >= 0) {
-      const newSelectedItem = this.items()[selectedItemIndex + (direction === 'next' ? +1 : -1)];
+      const newSelectedItem = this.sortedItems()[selectedItemIndex + (direction === 'next' ? +1 : -1)];
       if (newSelectedItem) {
+        this.expandedGroupKey.set(this.getGroupKey(newSelectedItem));
         this.onItemClick(newSelectedItem);
       }
     }
