@@ -3,6 +3,8 @@ import { CallIconComponent } from 'src/app/components/call-icon/call-icon.compon
 import { ActionButton, HeaderComponent } from 'src/app/components/header/header.component';
 import { VirtualScrollbarComponent } from 'src/app/components/virtual-scrollbar/virtual-scrollbar.component';
 import { LongPressDirective } from 'src/app/directives/long-press.directive';
+import { RecordingGroupsService } from 'src/app/features/recording-groups/recording-groups.service';
+import { RecordingGroupTitleComponent } from 'src/app/features/recording-groups/recording-group-title.component';
 import { IonicBundleModule } from 'src/app/IonicBundle.module';
 import { Recording } from 'src/app/models/recording';
 import { DatetimePipe } from 'src/app/pipes/datetime.pipe';
@@ -22,7 +24,7 @@ import { AndroidSAF } from 'src/plugins/androidsaf';
 import { ErrorCode } from 'src/plugins/bcrgui';
 import { CdkVirtualScrollViewport, ScrollingModule } from '@angular/cdk/scrolling';
 import { DatePipe } from '@angular/common';
-import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, signal, untracked, viewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, inject, signal, untracked, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Clipboard } from '@capacitor/clipboard';
@@ -44,6 +46,7 @@ import version from '../../version';
     HeaderComponent,
     IonicBundleModule,
     LongPressDirective,
+    RecordingGroupTitleComponent,
     ScrollingModule,
     ToHmsPipe,
     TranslatePipe,
@@ -52,6 +55,7 @@ import version from '../../version';
   providers: [
     ContactsService,
     DatePipe,
+    RecordingGroupsService,
     ToHmsPipe,
   ],
 })
@@ -74,21 +78,43 @@ export class MainPage implements AfterViewInit {
     return this.items()?.findIndex(i => i === item) ?? -1;
   });
 
-  // filtered items collection
-  protected items = computed<Recording[]>(() => {
-    // filter & sort
-    let filteredItems = filterList(this.recordingsService.recordings(), this.searchValue(), r => `${r.opName} ${r.opNumber}`);
-    filteredItems = sortRecordings(filteredItems, this.settings.recordingsSortMode);
-    // reset selection if item is now missing
+  protected recordingGroups = inject(RecordingGroupsService);
+  protected expandedGroupKey = this.recordingGroups.expandedGroupKey;
+
+  // Filtered and sorted recordings before the collapsed contact view is applied.
+  // Playback, multiselection and intent handling must keep using the full list.
+  private sortedItems = computed<Recording[]>(() => {
+    const filteredItems = filterList(
+      this.recordingsService.recordings(),
+      this.searchValue(),
+      r => `${r.opName} ${r.opNumber}`
+    );
+    const sortedItems = sortRecordings(filteredItems, this.settings.recordingsSortMode);
+
+    // Preserve the upstream behavior: a selected recording must be cleared when
+    // it is no longer part of the filtered list.
     untracked(() => {
-      const selItem = this.selectedItem();
-      if (selItem && !filteredItems.includes(selItem)) {
+      const selected = this.selectedItem();
+      if (selected && !sortedItems.includes(selected)) {
         this.clearSelection();
       }
     });
-    // return sorted
-    return filteredItems;
+
+    return sortedItems;
   });
+
+  // Group metadata is derived without writing to another signal from a computed().
+  protected groups = computed(() => this.recordingGroups.buildGroups(
+    this.sortedItems(),
+    this.settings.defaultCountryPrefix,
+  ));
+
+  // filtered and grouped items collection
+  protected items = computed(() => this.recordingGroups.flattenGroups(
+    this.groups(),
+    this.settings.recordingsSortMode,
+    this.settings.defaultCountryPrefix,
+  ));
 
   protected topIndex = 0; // index of top shown recording
   protected itemHeight = 78;
@@ -146,11 +172,12 @@ export class MainPage implements AfterViewInit {
     this.clearFilter();
     this.isMultiselect.set(false);
 
-    // find the required filename
-    const playItemIx = this.items().findIndex(i => i.audioUri === viewIntentFilename);
-    if (playItemIx >= 0) {
-
-      const playItem = this.items()[playItemIx];
+    // Find the requested file in the full list and expand its contact first. An
+    // older recording is intentionally absent from the collapsed display list.
+    const playItem = this.sortedItems().find(i => i.audioUri === viewIntentFilename);
+    if (playItem) {
+      this.recordingGroups.expand(playItem, this.settings.defaultCountryPrefix);
+      const playItemIx = this.items().findIndex(i => i === playItem);
 
       // ensure it's visible
       this.scrollViewport()?.scrollToIndex(playItemIx);
@@ -208,7 +235,7 @@ export class MainPage implements AfterViewInit {
   }
 
   getSelectedItems(): Recording[] {
-    return this.items().filter(r => r.selected);
+    return this.sortedItems().filter(r => r.selected);
   }
 
   /**
@@ -225,6 +252,66 @@ export class MainPage implements AfterViewInit {
     this.searchValue.set('');
     this.isSearch.set(false);
     // this.updateFilter();
+  }
+
+  /** Toggle expansion for a contact group. */
+  protected toggleExpand(groupKey: string) {
+    if (this.expandedGroupKey() === groupKey) {
+      const selected = this.selectedItem();
+      if (selected && this.getGroupKey(selected) === groupKey && !this.isGroupHeader(selected)) {
+        this.clearSelection();
+      }
+      this.expandedGroupKey.set(undefined);
+    } else {
+      this.expandedGroupKey.set(groupKey);
+    }
+  }
+
+  protected onCardClick(item: Recording) {
+    const key = this.getGroupKey(item);
+
+    if (!this.isMultiselect() && this.expandedGroupKey() !== key) {
+      this.expandedGroupKey.set(undefined);
+    }
+
+    if (!this.isMultiselect() && this.isGroupHeader(item) && this.getGroupCount(item) > 1) {
+      const isExpanded = this.expandedGroupKey() === key;
+
+      // Switching from an older recording back to the latest one must keep the
+      // history visible. Collapse only when the latest recording is already
+      // selected and the user taps the same contact again.
+      if (!isExpanded || item.selected) {
+        this.toggleExpand(key);
+      }
+
+      this.onItemClick(item);
+    }
+    else {
+      this.onItemClick(item);
+    }
+  }
+
+  /**
+   * Helper to check if a recording is the header of its group
+   */
+  protected isGroupHeader(item: Recording): boolean {
+    return this.recordingGroups.isGroupHeader(item, this.groups(), this.settings.defaultCountryPrefix);
+  }
+
+  protected getGroupCount(item: Recording): number {
+    return this.recordingGroups.getGroupCount(item, this.groups(), this.settings.defaultCountryPrefix);
+  }
+
+  protected isDialableNumber(item: Recording): boolean {
+    return this.recordingGroups.isDialable(item);
+  }
+
+  protected getDialUri(item: Recording): string {
+    return this.recordingGroups.getDialUri(item);
+  }
+
+  protected getGroupKey(item: Recording): string {
+    return this.recordingGroups.getGroupKey(item, this.settings.defaultCountryPrefix);
   }
 
   /**
@@ -415,7 +502,7 @@ export class MainPage implements AfterViewInit {
    */
   async selectAll() {
     this.isMultiselect.set(true);
-    this.items().forEach(i => i.selected = true); // select all VISIBLE items
+    this.sortedItems().forEach(i => i.selected = true);
   }
 
   /**
@@ -488,10 +575,11 @@ Duration: ${this.toHms.transform(item.duration)}
    */
   protected onSkip(direction: SkipDirection) {
     // find first selected item index
-    const selectedItemIndex = this.items().findIndex(i => i.selected);
+    const selectedItemIndex = this.sortedItems().findIndex(i => i.selected);
     if (selectedItemIndex >= 0) {
-      const newSelectedItem = this.items()[selectedItemIndex + (direction === 'next' ? +1 : -1)];
+      const newSelectedItem = this.sortedItems()[selectedItemIndex + (direction === 'next' ? +1 : -1)];
       if (newSelectedItem) {
+        this.recordingGroups.expand(newSelectedItem, this.settings.defaultCountryPrefix);
         this.onItemClick(newSelectedItem);
       }
     }
