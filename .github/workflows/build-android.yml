@@ -47,14 +47,28 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x android/gradlew
 
-      - name: Build debug APK
+      - name: Build arm64-v8a debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew -PciArm64Only=true assembleDebug --no-daemon
+
+      - name: Prepare fixed APK name
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$APK"
+          ABIS="$(unzip -Z1 "$APK" | sed -n 's#^lib/\([^/]*\)/.*#\1#p' | sort -u)"
+          if [ -n "$ABIS" ] && [ "$ABIS" != "arm64-v8a" ]; then
+            echo "Unexpected ABIs in APK: $ABIS"
+            exit 1
+          fi
+          cp "$APK" artifacts/bcr-gui-debug-arm64-v8a.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v6
         with:
-          name: bcr-gui-debug-${{ github.sha }}
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: bcr-gui-debug-arm64-v8a
+          path: artifacts/bcr-gui-debug-arm64-v8a.apk
           if-no-files-found: error
           retention-days: 14
