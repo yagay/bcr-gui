@@ -23,6 +23,8 @@ if (keystorePropsEnv != null && !keystorePropsEnv.isEmpty()) {
   }
 }
 
+def ciArm64Only = project.findProperty("ciArm64Only")?.toString() == "true"
+
 android {
   compileSdk rootProject.ext.compileSdkVersion
   namespace "com.github.nicorac.bcrgui"
@@ -35,6 +37,12 @@ android {
     versionCode 1015002
     versionName "1.15.2"
     testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+    if (ciArm64Only) {
+      ndk {
+        abiFilters 'arm64-v8a'
+      }
+    }
 
     buildFeatures {
       buildConfig = true
