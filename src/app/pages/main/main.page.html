@@ -110,7 +110,7 @@
           <ion-icon name="musical-notes-outline" />
           <span class="mini-player-text">
             <strong>{{ selectedItem()?.opName || callHistoryLabels.audio }}</strong>
-            <small>{{ selectedItem()?.date | datetime }}</small>
+            <small>{{ selectedItem()!.date | datetime }}</small>
           </span>
           <ion-icon [name]="playerExpanded() ? 'chevron-down' : 'chevron-up'" />
         </button>
@@ -151,7 +151,7 @@
       <ion-list lines="inset">
         @for (entry of detailRecords(); track entry.audioUri) {
           <ion-item class="history-record">
-            <app-call-icon slot="start" [direction]="entry.direction ?? ''" />
+            <app-call-icon slot="start" [direction]="entry.direction" />
             <ion-label>
               <h2>{{ entry.date | datetime }}</h2>
               <p>{{ entry.duration | toHms }} · {{ entry.filesize | filesize }}
