@@ -150,7 +150,7 @@ export class MainPage implements AfterViewInit {
   protected itemHeight = 86;
   protected itemGap = 0;
 
-  private player = viewChild(AudioPlayerComponent);
+  protected player = viewChild(AudioPlayerComponent);
   private scrollViewport = viewChild(CdkVirtualScrollViewport);
   private searchBar = viewChild(IonSearchbar);
 
@@ -304,7 +304,7 @@ export class MainPage implements AfterViewInit {
   protected isNewDay(item: Recording, index: number): boolean {
     if (this.settings.recordingsSortMode !== SortModeEnum.Date_ASC &&
         this.settings.recordingsSortMode !== SortModeEnum.Date_DESC) return false;
-    return index === 0 || localDayKey(item.date) !== localDayKey(this.items()[index - 1]?.date);
+    return index === 0 || localDayKey(item.date) !== localDayKey(this.items()[index - 1]?.date ?? Number.NaN);
   }
 
   protected dayLabel(item: Recording): string {
@@ -320,8 +320,10 @@ export class MainPage implements AfterViewInit {
 
   protected openDetails(item: Recording) {
     if (this.isMultiselect()) {
-      item.selected = !item.selected;
-      this.recordingsService.save();
+      const group = this.groups().get(this.getGroupKey(item)) ?? [item];
+      const next = !group.every(record => record.selected);
+      group.forEach(record => record.selected = next);
+      this.cdr.markForCheck();
       return;
     }
     this.detailGroupKey.set(this.getGroupKey(item));
@@ -633,7 +635,8 @@ Duration: ${this.toHms.transform(item.duration)}
       this.clearSelection();
       this.isMultiselect.set(true);
       if (item) {
-        item.selected = true;
+        const group = this.groups().get(this.getGroupKey(item)) ?? [item];
+        group.forEach(record => record.selected = true);
       }
     }
   }
