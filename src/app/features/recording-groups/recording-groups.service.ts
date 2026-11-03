@@ -48,20 +48,24 @@ export class RecordingGroupsService {
   }
 
   getGroupKey(recording: Recording, defaultCountryPrefix: string): string {
-    const name = recording.opName.trim().normalize('NFKC').replace(/\s+/g, ' ').toLocaleLowerCase();
-    if (name && name !== UNKNOWN_NAME_OR_NUMBER && !isPhoneNumber(recording.opName)) {
-      return `name:${name}`;
+    // A real phone number is a safer identity than a display name: two people
+    // may share the same name or a caller-ID name may change over time.
+    const rawNumber = recording.opNumber?.trim() ?? '';
+    if (isPhoneNumber(rawNumber)) {
+      let number = cleanupPhoneNumber(rawNumber);
+      const prefix = cleanupPhoneNumber(defaultCountryPrefix);
+      if (prefix && number.startsWith('0')) number = prefix + number.substring(1);
+      if (number) return `number:${number}`;
     }
 
-    let number = cleanupPhoneNumber(recording.opNumber);
-    const prefix = cleanupPhoneNumber(defaultCountryPrefix);
+    const name = (recording.opName ?? '').trim()
+      .normalize('NFKC').replace(/\s+/g, ' ').toLocaleLowerCase();
+    if (name && name !== UNKNOWN_NAME_OR_NUMBER &&
+        name !== (recording.audioDisplayName ?? '').toLocaleLowerCase() &&
+        !isPhoneNumber(name)) return `name:${name}`;
 
-    if (prefix && number.startsWith('0')) {
-      number = prefix + number.substring(1);
-    }
-
-    // Never merge all private/unknown calls into one unrelated contact.
-    return number ? `number:${number}` : `recording:${recording.audioUri}`;
+    // Unknown/private and unidentifiable VoIP recordings stay separate.
+    return `recording:${recording.audioUri}`;
   }
 
   isGroupHeader(
