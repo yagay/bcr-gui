@@ -4,7 +4,7 @@ import { ActionButton, HeaderComponent } from 'src/app/components/header/header.
 import { VirtualScrollbarComponent } from 'src/app/components/virtual-scrollbar/virtual-scrollbar.component';
 import { LongPressDirective } from 'src/app/directives/long-press.directive';
 import { RecordingGroupsService } from 'src/app/features/recording-groups/recording-groups.service';
-import { CallFilter, callSourceLabel, filterCallRecordings, localDayKey } from 'src/app/features/call-history/call-history';
+import { CallFilter, callSourceLabel, filterCallRecordings, isVoipRecording, localDayKey } from 'src/app/features/call-history/call-history';
 import { IonicBundleModule } from 'src/app/IonicBundle.module';
 import { Recording } from 'src/app/models/recording';
 import { DatetimePipe } from 'src/app/pipes/datetime.pipe';
@@ -143,7 +143,7 @@ export class MainPage implements AfterViewInit {
   });
   protected detailHeading = computed(() => {
     const record = this.detailRecords()[0];
-    return record?.opName || record?.opNumber || this.callHistoryLabels.details;
+    return record ? this.callerLabel(record) : this.callHistoryLabels.details;
   });
 
   protected topIndex = 0; // index of top shown recording
@@ -299,6 +299,13 @@ export class MainPage implements AfterViewInit {
 
   protected sourceLabel(item: Recording): string {
     return callSourceLabel(item);
+  }
+
+  protected callerLabel(item: Recording): string {
+    if (isVoipRecording(item)) {
+      return `${callSourceLabel(item)} · ${this.isZh ? '语音通话' : 'voice call'}`;
+    }
+    return item.opName || item.opNumber;
   }
 
   protected isNewDay(item: Recording, index: number): boolean {

@@ -65,7 +65,7 @@
           <div class="avatar"><ion-icon name="person-outline" /></div>
           <div class="call-summary">
             <div class="row-top">
-              <span class="caller-name">{{ item.opName || item.opNumber }}</span>
+              <span class="caller-name">{{ callerLabel(item) }}</span>
               @if (getGroupCount(item) > 1) {
                 <span class="group-count">{{ getGroupCount(item) }}</span>
               }

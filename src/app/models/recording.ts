@@ -44,6 +44,8 @@ export class Recording {
   // references to audio/metadata file
   @JsonProperty() audioUri!: string;
   @JsonProperty() audioDisplayName!: string;
+  /** Empty for root-level BCR calls, "VoIP" for the supported child folder. */
+  @JsonProperty() sourceFolder: string = '';
   @JsonProperty() metadataUri?: string; // must keep this in case of Delete() calls...
 
   // test if this recording has an associated metadata file

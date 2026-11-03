@@ -44,7 +44,8 @@ feature commit while preserving upstream histories.
 ## Limitations
 
 BCR's experimental VoIP recorder may output to `VoIP/` below the configured
-folder. The original BCR-GUI SAF scanner only reads the selected directory,
-so subdirectories may not be discovered. This change does not claim the
-VoIP filter provides full recursive scanning, and it does not change the
-underlying recording engine or Android privileges.
+folder. BCR-GUI now scans the selected root plus its immediate `VoIP/` child
+folder (if present), and recognizes both `audio/wav` and `audio/x-wav`.
+No arbitrary recursion, no additional storage permission, and no change
+to the underlying recording engine or Android privileges. Unknown
+VoIP filenames retain their ordinary file-record behavior.
