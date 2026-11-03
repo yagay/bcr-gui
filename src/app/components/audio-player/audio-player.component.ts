@@ -173,6 +173,7 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
    * Test if the player is ready to play
    */
   public isReady() { return this.ready() };
+  public isPlaying() { return this.status() === PlayerStatusEnum.Playing; }
 
   /**
    * Show error alert
@@ -188,7 +189,7 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   /**
    * Toggle between play and pause
    */
-  protected async togglePlayPause() {
+  public async togglePlayPause() {
     if (this.status() === PlayerStatusEnum.Paused) {
       return this.play();
     }
