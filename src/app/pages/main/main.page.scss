@@ -16,7 +16,13 @@
   --padding-start:0;
   --padding-end:0;
 }
-.history-layout {height:100%;min-height:0;min-width:0;display:flex;flex-direction:column;}
+.history-layout {
+  height:100%;min-height:0;min-width:0;display:flex;flex-direction:column;
+  box-sizing:border-box;
+  /* The nav-bar inset is reserved for the entire content, including
+     the collapsed mini player and recording details, not just the list. */
+  padding-bottom:var(--history-navigation-clearance);
+}
 .history-list-area {position:relative;flex:1 1 0;min-height:0;overflow:hidden;}
 .virtual-scroll-viewport {height:100%;width:100%;box-sizing:border-box;}
 /* Capacitor can extend WebView content behind Android's button navigation bar,
@@ -36,10 +42,7 @@
     env(safe-area-inset-bottom, 0px)
   );
 }
-.history-list-area {
-  padding-bottom: var(--history-navigation-clearance);
-  box-sizing:border-box;
-}
+.history-list-area {box-sizing:border-box;}
 .virtual-scroll-viewport ::ng-deep .cdk-virtual-scroll-content-wrapper {width:100%;}
 .virtual-scrollbar {position:absolute;top:0;right:0;bottom:0;pointer-events:none;}
 .history-empty {position:absolute;top:32%;left:0;width:100%;display:flex;flex-direction:column;

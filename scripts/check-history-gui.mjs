@@ -39,7 +39,7 @@ assert(layout.includes('flex:1 1 0;'), 'Ionic content must get remaining page he
 assert(controller.includes('ResizeObserver'), 'Viewport must react to first-page size changes');
 assert(controller.includes('this.displayRows().length;'), 'SAF index updates must trigger CDK remeasurement');
 assert(layout.includes('--history-navigation-clearance'), 'History must reserve space for system navigation');
-assert(layout.includes('padding-bottom: var(--history-navigation-clearance)'), 'Navigation clearance must belong to the scroll viewport region');
+assert(layout.includes('padding-bottom:var(--history-navigation-clearance)'), 'Navigation clearance must protect the list, details and collapsed mini player');
 assert(controller.includes('initializing = signal(true)'), 'Initial load state must be visible');
 assert(page.includes('recordingsService.lastRefreshError()'), 'Scan failure must have a recovery state');
 assert(page.includes('(click)="invertSelection()"'), 'Bulk operations require invert selection');

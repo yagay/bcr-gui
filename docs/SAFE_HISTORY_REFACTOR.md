@@ -60,3 +60,16 @@ remaining height. A ResizeObserver watches both the CDK viewport and its parent.
 The reactive display-row count schedules one CDK `checkViewportSize()` per frame,
 including after the initial asynchronous SAF scan. Playback is never required to
 force the list to become scrollable.
+
+## Collapsed contact player and navigation clearance
+
+The playback controller is one reusable 78px component, displayed as a CDK row
+for visible recordings or as a dock when the active recording is hidden by a
+collapsed contact. Only the view moves; the native audio engine is unchanged.
+The Ionic content reserves Android navigation safe space at the whole
+`history-layout` level, so the dock and detail buttons are also reachable.
+
+Group header taps only expand or collapse. The header's dedicated play button
+plays the representative recording. In multiselect mode, group headers select
+the full group and children select themselves. Invert/deselect-all act on the
+complete filtered source list, independent of CDK viewport rendering.
