@@ -25,7 +25,7 @@
       }
       <div class="recording-row" [class.picked]="isSelected(entry)"
         longPress (longPress)="startSelection(entry)"
-        (click)="toggleSelection(entry)">
+        (click)="rowClick(entry)">
         <app-call-icon class="call-direction" [direction]="entry.direction" />
         <div class="recording-info">
           <div class="recording-clock">{{ clock(entry.date) }}</div>
