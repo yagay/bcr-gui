@@ -116,13 +116,15 @@ export class RecordingsService {
 
     // immediately send a progress
     this.refreshProgress.set(0.001);
-    console.log("Reading files in folder:");
+    this.scanCounts = { directories: 0, entries: 0, audio: 0, metadata: 0, failedDirectories: 0, newRecords: 0, reusedRecords: 0, metadataFallbacks: 0, partial: false };
+    this.logScan('SCAN_START');
 
     // Contact access is optional: a permission/provider failure must not hide audio.
     let pnm: Awaited<ReturnType<ContactsService['getPhoneNumbersMap']>> | undefined;
     try {
       pnm = await this.contactsService.getPhoneNumbersMap();
     } catch (error) {
+      this.logScan('CONTACTS_UNAVAILABLE');
       console.warn('Contact lookup unavailable; indexing recordings without names:', error);
     }
 
@@ -145,12 +147,15 @@ export class RecordingsService {
       const scan = async (directoryUri: string, folder: string, depth: number): Promise<void> => {
         if (visited.has(directoryUri)) return;
         visited.add(directoryUri);
+        this.scanCounts['directories'] = visited.size;
         let entries: Awaited<ReturnType<typeof AndroidSAFUtils.listFiles>>;
         try {
           entries = await AndroidSAFUtils.listFiles({ directoryUri });
         } catch (error) {
           if (!folder) throw error;
           scanIncomplete = true;
+          this.scanCounts['failedDirectories'] = Number(this.scanCounts['failedDirectories']) + 1;
+          this.logScan('FOLDER_SCAN_FAILED depth=' + depth);
           console.warn('Cannot scan recording subfolder:', folder, error);
           return;
         }
@@ -163,7 +168,8 @@ export class RecordingsService {
               await scan(file.uri, folder ? `${folder}/${file.displayName}` : file.displayName, depth + 1);
             } else {
               scanIncomplete = true;
-              console.warn('Recording folder nesting limit reached:', file.displayName);
+              this.scanCounts['failedDirectories'] = Number(this.scanCounts['failedDirectories']) + 1;
+              this.logScan('FOLDER_DEPTH_LIMIT');
             }
           } else {
             indexedFiles.push({ file, folder });
@@ -182,6 +188,12 @@ export class RecordingsService {
       const metadataFilesObj = Object.fromEntries(indexedFiles
         .filter(({file}) => /\.json$/i.test(file.displayName))
         .map(({file, folder}) => [fileKey(file.displayName, folder), file]));
+
+      this.scanCounts['entries'] = indexedFiles.length;
+      this.scanCounts['audio'] = Object.keys(audioFilesObj).length;
+      this.scanCounts['metadata'] = Object.keys(metadataFilesObj).length;
+      this.scanCounts['partial'] = scanIncomplete;
+      this.logScan('SCAN_FILES entries=' + indexedFiles.length + ' audio=' + Object.keys(audioFilesObj).length + ' metadata=' + Object.keys(metadataFilesObj).length + ' partial=' + scanIncomplete);
 
       // STEP 1: remove deleted files from DB
       // ------------------------------------
@@ -214,6 +226,7 @@ export class RecordingsService {
           // check if current audio file already exists in current DB (compare display names)
           let dbRecord = currentDbObj[key];
           if (dbRecord) {
+            this.scanCounts['reusedRecords'] = Number(this.scanCounts['reusedRecords']) + 1;
             // file already exists, update Uris (selected dir could have changed...)
             dbRecord.audioUri = file.uri;
             dbRecord.sourceFolder = sourceFolder;
@@ -229,11 +242,14 @@ export class RecordingsService {
               dbRecord = await Recording.createInstance(file, metadataFile, filenameRegExp);
             } catch (error) {
               // One bad metadata/audio entry must not abort the entire history scan.
+              this.scanCounts['metadataFallbacks'] = Number(this.scanCounts['metadataFallbacks']) + 1;
+              this.logScan('METADATA_FALLBACK');
               console.warn('Cannot read recording metadata; using filename:', file.displayName, error);
               dbRecord = await Recording.createInstance(file, undefined, filenameRegExp);
             }
             dbRecord.sourceFolder = sourceFolder;
             currentDbObj[key] = dbRecord;
+            this.scanCounts['newRecords'] = Number(this.scanCounts['newRecords']) + 1;
           }
 
           // update record opName, if needed
@@ -254,6 +270,7 @@ export class RecordingsService {
       this.lastUpdate = new Date().getTime();
       this.lastFullScan = this.lastUpdate;
       this.recordings.set(Object.values(currentDbObj));
+      this.logScan('SCAN_COMPLETE indexed=' + this.recordings().length);
       await this.save(false);
 
       // start asynchronously (DO NOT AWAIT IT!)
@@ -261,6 +278,7 @@ export class RecordingsService {
 
     }
     catch(error: any) {
+      this.logScan('SCAN_ERROR code=' + String(error?.code || 'unknown'));
       if (error.code === ErrorCode.ERR_INVALID_URI) {
         this.selectRecordingsDirectory(() => this.refreshContent());
       }
