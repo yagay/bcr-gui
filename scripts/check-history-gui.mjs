@@ -27,4 +27,10 @@ assert(controls.includes('directionChange = output'), 'Missing direction filter 
 assert(details.includes('recording = input.required'), 'Missing recording details input');
 assert(player.includes('loadQueue: Promise<void>'), 'Native player switch serialization removed');
 assert(player.includes('isReadyFor(recording: Recording)'), 'File-specific readiness guard removed');
+const layout = read('src/app/pages/main/main.page.scss');
+assert(layout.includes('display:flex;') || layout.includes('display:flex'),
+  'Page host must participate in a deterministic vertical layout');
+assert(layout.includes('flex:1 1 0;'), 'Ionic content must get remaining page height at first entry');
+assert(controller.includes('ResizeObserver'), 'Viewport must react to first-page size changes');
+assert(controller.includes('this.displayRows().length;'), 'SAF index updates must trigger CDK remeasurement');
 console.log('Recording GUI architecture checks passed.');

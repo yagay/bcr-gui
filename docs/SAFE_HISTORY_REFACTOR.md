@@ -52,3 +52,11 @@ always selects just its own file.
 The CI workflow runs actual node:test tests using Node 24's built-in
 TypeScript stripping and also type-checks Angular/Jasmine regression sources.
 The Android APK still requires successful CI and device-level playback checks.
+
+## First-entry viewport stability
+
+The page host uses a full-height column flexbox and `ion-content` occupies the
+remaining height. A ResizeObserver watches both the CDK viewport and its parent.
+The reactive display-row count schedules one CDK `checkViewportSize()` per frame,
+including after the initial asynchronous SAF scan. Playback is never required to
+force the list to become scrollable.
