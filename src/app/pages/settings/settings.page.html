@@ -158,34 +158,10 @@
       <h4>诊断日志 / Diagnostic logs</h4>
     </ion-item-divider>
 
-    <ion-item button (click)="diagnosticInput.click()">
-      <div class="label">
-        <div>导入日志 / Import log</div>
-        <div class="help">选择 TXT、LOG 或 JSON 日志进行本地查看；不会导入为应用设置。</div>
-      </div>
-      <input #diagnosticInput type="file" accept=".txt,.log,.json,text/plain,application/json"
-        style="display:none" (change)="importDiagnosticLog($event)" />
-    </ion-item>
-
-    @if (importedLogName()) {
-      <ion-item>
-        <div class="diagnostic-preview">
-          <div class="diagnostic-header">
-            <strong>{{ importedLogName() }} · {{ importedLogLines() }} lines</strong>
-            <ion-button fill="clear" size="small" (click)="clearImportedLog()">清除 / Clear</ion-button>
-          </div>
-          <pre class="diagnostic-log">{{ importedLogText() }}</pre>
-          @if (importedLogTruncated()) {
-            <div class="help">仅预览前 80,000 个字符 / Preview truncated.</div>
-          }
-        </div>
-      </ion-item>
-    }
-
     <ion-item button (click)="exportDiagnosticReport()">
       <div class="label">
-        <div>导出录音诊断信息 / Export index diagnostics</div>
-        <div class="help">导出已索引录音数量、文件类型与子目录统计，不包含联系人或文件名。</div>
+        <div>导出诊断日志 / Export diagnostic log</div>
+        <div class="help">一键导出历史录音扫描日志、扫描错误及数量统计，便于定位漏读问题。</div>
       </div>
     </ion-item>
 
