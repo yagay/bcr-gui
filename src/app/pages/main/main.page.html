@@ -80,7 +80,7 @@
               <div class="call-summary">
                 <div class="row-top">
                   <span class="caller-name">{{ callerLabel(row.recording) }}</span>
-                  @if (getGroupCount(row.recording) > 1) {
+                  @if (!showEachRecording() && getGroupCount(row.recording) > 1) {
                     <span class="group-count">{{ getGroupCount(row.recording) }}</span>
                   }
                 </div>
@@ -90,7 +90,7 @@
                   @if (sourceLabel(row.recording)) {
                     <span class="source-label">{{ sourceLabel(row.recording) }}</span>
                   }
-                  <span class="call-time">{{ row.recording.date | datetime }}</span>
+                  <span class="call-time">{{ callDateTime(row.recording) }}</span>
                   @if (row.recording.duration) {
                     <span>· {{ row.recording.duration | toHms }}</span>
                   }
