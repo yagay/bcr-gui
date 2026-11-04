@@ -6,6 +6,7 @@ import { LongPressDirective } from 'src/app/directives/long-press.directive';
 import { RecordingGroupsService } from 'src/app/features/recording-groups/recording-groups.service';
 import { CallFilter, CallHistoryRow, buildCallHistoryRows, callSourceLabel, filterCallRecordings, isVoipRecording, localDayKey } from 'src/app/features/call-history/call-history';
 import { CallInlinePlayerComponent } from 'src/app/features/call-history/call-inline-player.component';
+import { historyActionRecords, visibleHistoryRecordings } from 'src/app/features/call-history/history-view-model';
 import { CallDetailSheetComponent } from 'src/app/features/call-history/call-detail-sheet.component';
 import { IonicBundleModule } from 'src/app/IonicBundle.module';
 import { Recording } from 'src/app/models/recording';
@@ -146,13 +147,12 @@ export class MainPage implements AfterViewInit {
 
   // A fixed-height virtual list contains ONE summary per contact/number.
   // Group history lives in a separate sheet: expanding never alters row height.
-  protected items = computed(() => this.showEachRecording()
-    ? this.sortedItems()
-    : sortRecordings(
-      Array.from(this.groups().values(), group => group[0]),
-      this.settings.recordingsSortMode,
-    )
-  );
+  protected items = computed(() => visibleHistoryRecordings(
+    this.sortedItems(),
+    this.groups(),
+    this.showEachRecording(),
+    this.settings.recordingsSortMode,
+  ));
   // An extra fixed-height virtual item appears immediately below the call
   // whose playback button was pressed. No row changes its height on expansion.
   protected virtualItems = computed<CallHistoryRow[]>(() => buildCallHistoryRows(
@@ -406,9 +406,9 @@ export class MainPage implements AfterViewInit {
 
   /** Single-record view acts on one recording; grouped view acts on a contact. */
   private recordsForAction(item: Recording): Recording[] {
-    return this.showEachRecording()
-      ? [item]
-      : (this.groups().get(this.getGroupKey(item)) ?? [item]);
+    return historyActionRecords(
+      item, this.groups(), this.getGroupKey(item), this.showEachRecording(),
+    );
   }
 
   protected openDetails(item: Recording) {
@@ -576,10 +576,13 @@ export class MainPage implements AfterViewInit {
       message: this.i18n.get('HOME_DELETE_CONFIRM_TEXT', items.length),
       confirmText: this.i18n.get('LBL_DELETE'),
       onConfirm: async () => {
-        // forcibly unload audio
+        // Close the sheet before deleting its recording objects so the view
+        // never retains a stale row from an old contact group.
+        this.closeDetails();
         await this.player()?.unload();
-        this.recordingsService.deleteRecording(items);
+        await this.recordingsService.deleteRecording(items);
         this.clearSelection();
+        this.refreshViewportLayout();
       }
     });
 
