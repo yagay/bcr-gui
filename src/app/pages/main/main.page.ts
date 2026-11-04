@@ -68,7 +68,9 @@ export class MainPage implements AfterViewInit {
   protected isSearch = signal(false);
   protected searchValue = signal('');
   protected callFilter = signal<CallFilter>('all');
-  protected showEachRecording = signal(false);
+  // Preserve upstream history visibility: never hide older recordings on first launch.
+  // Contact-group summaries remain available via the explicit toggle.
+  protected showEachRecording = signal(true);
   protected detailGroupKey = signal<string | undefined>(undefined);
   protected playerExpanded = signal(false);
   // Latest tap wins: stale readiness polls must never play the old recording.
@@ -233,7 +235,9 @@ export class MainPage implements AfterViewInit {
     const playItem = this.sortedItems().find(i => i.audioUri === viewIntentFilename);
     if (playItem) {
       const key = this.getGroupKey(playItem);
-      const playItemIx = this.items().findIndex(i => this.getGroupKey(i) === key);
+      const playItemIx = this.items().findIndex(i => this.showEachRecording()
+        ? i.audioUri === playItem.audioUri
+        : this.getGroupKey(i) === key);
 
       // ensure it's visible
       if (playItemIx >= 0) this.scrollViewport()?.scrollToIndex(playItemIx);
