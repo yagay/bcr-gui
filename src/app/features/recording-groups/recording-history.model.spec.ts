@@ -1,7 +1,8 @@
 import { Recording } from 'src/app/models/recording';
 import { SortModeEnum } from 'src/app/utils/recordings-sorter';
 import { RecordingGroupsService } from './recording-groups.service';
-import { buildRecordingHistory, projectRecordingHistory, historyConsistency, filterRecordingDirection, buildDisplayRows } from './recording-history.model';
+import { buildRecordingHistory, projectRecordingHistory, historyConsistency, filterRecordingDirection } from './recording-history.model';
+import { buildDisplayRows } from './history-display-rows';
 
 function makeRecording(index: number, number: string): Recording {
   const r = new Recording();
