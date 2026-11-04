@@ -51,7 +51,7 @@
           [isHeader]="showAllRecordings() || isGroupHeader(item)"
           [groupCount]="showAllRecordings() ? 1 : getGroupCount(item)"
           [expanded]="expandedGroupKey() === getGroupKey(item)"
-          [selected]="!!item.selected" [multiselect]="isMultiselect()" [zh]="isZh"
+          [selected]="!!item.selected" [playing]="isRowPlaying(item)" [multiselect]="isMultiselect()" [zh]="isZh"
           (opened)="onRowClick(item)" (playClicked)="onPlayRow(item)"
           (expandedClicked)="toggleGroup(item)" (longPressed)="startMultiselection(item)" />
       </cdk-virtual-scroll-viewport>
