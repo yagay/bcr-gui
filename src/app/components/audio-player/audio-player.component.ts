@@ -6,7 +6,7 @@ import { MessageBoxService } from 'src/app/services/message-box.service';
 import { RecordingsService } from 'src/app/services/recordings.service';
 import { SettingsService } from 'src/app/services/settings.service';
 import { AudioPlayer } from 'src/plugins/audioplayer';
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, effect, input, OnDestroy, OnInit, output, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, effect, input, OnDestroy, OnInit, output, signal, untracked } from '@angular/core';
 import { RangeCustomEvent } from '@ionic/angular';
 
 export enum PlayerStatusEnum {
@@ -208,6 +208,7 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
     return this.ready() && this.loadedRecording === recording;
   }
   public isPlaying() { return this.status() === PlayerStatusEnum.Playing; }
+  public readonly playingState = computed(() => this.status() === PlayerStatusEnum.Playing);
   /** Read-only progress for the compact controller; no second playback timer. */
   public readonly currentPosition = this.progress.asReadonly();
   public readonly totalDuration = this.duration.asReadonly();

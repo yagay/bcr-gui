@@ -16,8 +16,8 @@ import { I18nService } from 'src/app/services/i18n.service';
 import { MessageBoxService } from 'src/app/services/message-box.service';
 import { RecordingsService } from 'src/app/services/recordings.service';
 import { SettingsService } from 'src/app/services/settings.service';
-import { buildRecordingHistory, projectRecordingHistory, historyConsistency, filterRecordingDirection, HistoryFilter } from 'src/app/features/recording-groups/recording-history.model';
-import { sortRecordings } from 'src/app/utils/recordings-sorter';
+import { buildRecordingHistory, projectRecordingHistory, historyConsistency, filterRecordingDirection, HistoryFilter, buildDisplayRows, HistoryDisplayRow } from 'src/app/features/recording-groups/recording-history.model';
+import { SortModeEnum } from 'src/app/utils/recordings-sorter';
 import { untilTrue } from 'src/app/utils/waitForAsync';
 import { AndroidSAF } from 'src/plugins/androidsaf';
 import { ErrorCode } from 'src/plugins/bcrgui';
@@ -85,7 +85,7 @@ export class MainPage implements AfterViewInit {
     const sortedItems = buildRecordingHistory(
       filterRecordingDirection(this.recordingsService.recordings(), this.directionFilter()),
       this.searchValue(),
-      this.settings.recordingsSortMode,
+      this.sortMode(),
     );
 
     return sortedItems;
@@ -95,24 +95,67 @@ export class MainPage implements AfterViewInit {
   protected groups = computed(() => this.recordingGroups.buildGroups(
     this.sortedItems(),
     this.settings.defaultCountryPrefix,
-    this.settings.recordingsSortMode,
+    this.sortMode(),
   ));
 
   // filtered and grouped items collection
   protected items = computed(() => this.showAllRecordings()
     ? this.sortedItems()
     : projectRecordingHistory(
-      this.groups(), this.recordingGroups, this.settings.recordingsSortMode,
+      this.groups(), this.recordingGroups, this.sortMode(),
       this.settings.defaultCountryPrefix,
     ));
   // The source count is intentionally independent of the expanded/collapsed
   // CDK rows. Grouping must never change the number of indexed recordings.
+  protected displayRows = computed(() => buildDisplayRows(
+    this.items(),
+    this.isMultiselect() ? undefined : this.selectedItem()?.audioUri,
+  ));
+  protected displayCount = computed(() => this.displayRows().length);
   protected indexedCount = computed(() => this.recordingsService.recordings().length);
   protected selectedCount = signal(0);
+  protected sortMode = signal<SortModeEnum>(this.settings.recordingsSortMode);
   protected isRefreshing = computed(() => this.recordingsService.refreshProgress() !== undefined);
   protected visibleCount = computed(() => this.items().length);
   protected groupCount = computed(() => this.groups().size);
   protected historyIntegrity = computed(() => historyConsistency(this.sortedItems(), this.groups()));
+  protected setSortMode(mode: SortModeEnum): void {
+    if (this.sortMode() === mode) return;
+    this.resetListInteraction();
+    this.sortMode.set(mode);
+    this.settings.recordingsSortMode = mode;
+    void this.settings.save();
+    this.scrollViewport()?.scrollToIndex(0);
+    this.remeasureViewport();
+  }
+
+  protected getSortOptions() {
+    return [
+      { value: SortModeEnum.Date_DESC, label: this.isZh ? '日期：最新优先' : 'Date: newest' },
+      { value: SortModeEnum.Date_ASC, label: this.isZh ? '日期：最早优先' : 'Date: oldest' },
+      { value: SortModeEnum.Duration_DESC, label: this.isZh ? '时长：最长优先' : 'Duration: longest' },
+      { value: SortModeEnum.Duration_ASC, label: this.isZh ? '时长：最短优先' : 'Duration: shortest' },
+    ];
+  }
+
+  protected trackByDisplayRow(_index: number, entry: HistoryDisplayRow): string {
+    return entry.key;
+  }
+
+  protected inlineProgress(): number { return this.player()?.currentPosition() ?? 0; }
+  protected inlineDuration(): number { return this.player()?.totalDuration() ?? this.selectedItem()?.duration ?? 0; }
+  protected inlinePlaying(): boolean { return this.player()?.playingState() === true; }
+  protected inlineReady(): boolean { return this.selectedItem() !== undefined && this.player()?.isReadyFor(this.selectedItem()!) === true; }
+  protected seekInline(event: Event): void {
+    const position = Number((event.target as HTMLInputElement).value);
+    if (Number.isFinite(position)) void this.player()?.seekTo(position);
+  }
+  protected toggleInline(): void {
+    const item = this.selectedItem();
+    if (item) void this.selectAndPlay(item);
+  }
+  protected switchPlaybackSpeed(): void { void this.player()?.toggleSpeed(); }
+  protected playbackSpeed(): number { return this.settings.playbackSpeed; }
   protected setDirectionFilter(value: HistoryFilter): void {
     if (this.directionFilter() === value) return;
     this.resetListInteraction();
@@ -278,7 +321,7 @@ export class MainPage implements AfterViewInit {
       const playItemIx = this.items().findIndex(i => i === playItem);
 
       // ensure it's visible
-      this.scrollViewport()?.scrollToIndex(playItemIx);
+      this.scrollViewport()?.scrollToIndex(playItemIx >= 0 ? this.displayRows().findIndex(row => row.key === playItem.audioUri) : 0);
 
       await this.selectAndPlay(playItem);
 
@@ -647,8 +690,5 @@ Duration: ${this.toHms.transform(item.duration)}
     }
   }
 
-  protected trackByUri(idx: number, item: Recording) {
-    return item.audioUri;
-  }
 
 }

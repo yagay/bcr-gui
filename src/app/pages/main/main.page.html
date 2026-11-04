@@ -25,8 +25,8 @@
 <app-history-controls [zh]="isZh" [direction]="directionFilter()" [total]="indexedCount()"
   [contactCount]="groupCount()" [matches]="historyIntegrity().sourceCount"
   [hasFilter]="!!searchValue() || directionFilter() !== 'all'"
-  [allRecordings]="showAllRecordings()" [refreshing]="isRefreshing()"
-  (directionChange)="setDirectionFilter($event)" (toggleView)="toggleViewMode()"
+  [allRecordings]="showAllRecordings()" [refreshing]="isRefreshing()" [sortMode]="sortMode()"
+  (sortChange)="setSortMode($event)" (directionChange)="setDirectionFilter($event)" (toggleView)="toggleViewMode()"
   (refresh)="refreshFromToolbar()" />
 
 <ion-content id="main-content" class="main-content" [scrollY]="false">
@@ -38,15 +38,38 @@
       <cdk-virtual-scroll-viewport #vsv class="virtual-scroll-viewport ion-content-scroll-host"
         [itemSize]="itemHeight" [minBufferPx]="480" [maxBufferPx]="960"
         (scrolledIndexChange)="onScroll($event)">
-        <app-history-recording-row
-          *cdkVirtualFor="let item of items(); trackBy: trackByUri"
-          [recording]="item"
-          [isHeader]="showAllRecordings() || isGroupHeader(item)"
-          [groupCount]="showAllRecordings() ? 1 : getGroupCount(item)"
-          [expanded]="expandedGroupKey() === getGroupKey(item)"
-          [selected]="!!item.selected" [playing]="isRowPlaying(item)" [multiselect]="isMultiselect()" [zh]="isZh"
-          (opened)="onRowClick(item)" (playClicked)="onPlayRow(item)"
-          (expandedClicked)="toggleGroup(item)" (longPressed)="startMultiselection(item)" />
+        <ng-container *cdkVirtualFor="let entry of displayRows(); trackBy: trackByDisplayRow">
+          @if (entry.kind === 'recording') {
+            <app-history-recording-row
+              [recording]="entry.recording"
+              [isHeader]="showAllRecordings() || isGroupHeader(entry.recording)"
+              [groupCount]="showAllRecordings() ? 1 : getGroupCount(entry.recording)"
+              [expanded]="expandedGroupKey() === getGroupKey(entry.recording)"
+              [selected]="!!entry.recording.selected"
+              [playing]="isRowPlaying(entry.recording)"
+              [multiselect]="isMultiselect()" [zh]="isZh"
+              (opened)="onRowClick(entry.recording)" (playClicked)="onPlayRow(entry.recording)"
+              (expandedClicked)="toggleGroup(entry.recording)"
+              (longPressed)="startMultiselection(entry.recording)" />
+          } @else {
+            <div class="inline-playback" role="group" [attr.aria-label]="isZh ? '录音播放控制' : 'Recording playback controls'">
+              <div class="inline-timeline">
+                <span>{{ inlineProgress() | toHms }}</span>
+                <input type="range" [min]="0" [max]="inlineDuration() || 1"
+                  [value]="inlineProgress()" [disabled]="!inlineReady()"
+                  (change)="seekInline($event)" [attr.aria-label]="isZh ? '播放进度' : 'Playback position'"/>
+                <span>{{ inlineDuration() | toHms }}</span>
+              </div>
+              <div class="inline-buttons">
+                <button type="button" (click)="onSkip('prev')" [disabled]="!inlineReady()" aria-label="Previous recording">⏮</button>
+                <button type="button" (click)="toggleInline()" [disabled]="!inlineReady()" [attr.aria-label]="inlinePlaying() ? 'Pause' : 'Play'">{{ inlinePlaying() ? 'Ⅱ' : '▶' }}</button>
+                <button type="button" (click)="onSkip('next')" [disabled]="!inlineReady()" aria-label="Next recording">⏭</button>
+                <button type="button" (click)="switchPlaybackSpeed()" [disabled]="!inlineReady()">{{ playbackSpeed() }}×</button>
+                <button type="button" (click)="clearSelection()" [attr.aria-label]="isZh ? '关闭播放器' : 'Close playback'">×</button>
+              </div>
+            </div>
+          }
+        </ng-container>
       </cdk-virtual-scroll-viewport>
       <app-virtual-scrollbar class="virtual-scrollbar" [virtualScrollViewport]="vsv" />
       @if (items().length === 0 && recordingsService.refreshProgress() === undefined) {
@@ -63,7 +86,7 @@
         (close)="clearSelection()" (edit)="editItem(selectedItem()!)"
         (share)="shareRecording(selectedItem()!)" (delete)="deleteItems([selectedItem()!])" />
       <!-- One player, outside CDK. Selecting or scrolling never remounts another. -->
-      <app-audio-player #audioPlayer class="player" [recording]="selectedItem()!"
+      <app-audio-player #audioPlayer class="player-engine" [recording]="selectedItem()!"
         (onSkip)="onSkip($event)" />
     }
   </div>
