@@ -1,100 +1,158 @@
-/* Call-history view: fixed-height virtualized rows and a separate details sheet. */
-:host { display: block; }
-.call-filters {
-  display: flex;
-  gap: 6px;
-  padding: 8px 14px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  background: var(--ion-background-color);
-  border-bottom: 1px solid var(--ion-color-step-150);
-}
-.filter-chip {
-  flex: 1 0 auto;
-  border: 0;
-  padding: 9px 12px;
-  border-radius: 999px;
-  background: var(--ion-color-step-100);
-  color: var(--ion-text-color);
-  font-weight: 500;
-  font-size: 13px;
-}
-.filter-chip.active { color: var(--ion-color-primary-contrast); background: var(--ion-color-primary); }
-.main-content { --padding-top: 0; --padding-bottom: 0; --padding-start: 0; --padding-end: 0; }
-.content-wrapper { position: relative; height: 100%; }
-.items { position: relative; height: 100%; padding: 0; margin: 0; background: var(--ion-background-color); }
-.virtual-scroll-viewport { height: 100%; }
-.virtual-scroll-viewport ::ng-deep .cdk-virtual-scroll-content-wrapper { width: 100%; }
-.virtual-scrollbar { position: absolute; top: 0; right: 0; bottom: 0; }
-.virtual-row {
-  box-sizing: border-box;
-  display: block;
-  height: 86px;
-  min-height: 86px;
-  max-height: 86px;
-  overflow: hidden;
-  position: relative;
-  contain: layout paint size;
-}
-.call-row {
-  box-sizing: border-box;
+.virtual-scroll-viewport {
   height: 100%;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 9px 13px;
-  border-bottom: 1px solid var(--ion-color-step-100);
-  background: var(--ion-background-color);
-  cursor: pointer;
-}
-.call-row.selected { background: var(--ion-color-step-50); }
-.avatar {
-  width: 44px; height: 44px; border-radius: 50%;
-  background: var(--ion-color-step-100);
-  color: var(--ion-color-step-650);
-  flex: 0 0 auto;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 22px;
-}
-.call-summary { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }
-.row-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.caller-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 16px; font-weight: 600; }
-.group-count { border-radius: 9px; background: var(--ion-color-step-150); padding: 2px 7px; font-size: 11px; }
-.row-meta { display: flex; align-items: center; gap: 5px; overflow: hidden; white-space: nowrap; color: var(--ion-color-step-600); font-size: 12px; }
-.call-direction-icon { flex: 0 0 auto; width: 13px; height: 13px; }
-.call-time { overflow: hidden; text-overflow: ellipsis; }
-.source-label { color: var(--ion-color-primary); font-weight: 600; }
-.day-label { font-size: 10px; color: var(--ion-color-step-600); line-height: 10px; }
-.row-play, .mini-action {
-  appearance: none; border: 0; background: transparent;
-  color: var(--ion-color-primary); display: flex; align-items: center; justify-content: center;
-}
-.row-play { width: 44px; height: 48px; flex: 0 0 auto; font-size: 26px; }
-.row-chevron { color: var(--ion-color-step-400); }
-.selection-icon { color: var(--ion-color-primary); font-size: 23px; }
-.empty-list { position: absolute; inset: 25% 0 auto; display: flex; align-items: center; flex-direction: column; color: var(--ion-color-step-550); }
-.empty-list ion-icon { font-size: 40px; }
-.audio-engine {
-  position: absolute; width: 1px; height: 1px;
-  overflow: hidden; visibility: hidden; pointer-events: none;
+
+  ::ng-deep .cdk-virtual-scroll-content-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: var(--item-gap);
+    padding: 12px 2px;
+  }
+
 }
 
-.history-counts {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 7px 12px;
-  padding: 7px 14px;
-  border-bottom: 1px solid var(--ion-color-step-150);
-  color: var(--ion-color-step-600);
-  font-size: 11px;
+.toolbar-menu-items {
+  ion-icon {
+    margin-right: .5em;
+    color: unset;
+  }
 }
-.history-view-button {
-  margin-inline-start: auto;
-  padding: 5px 9px;
-  border: 1px solid var(--ion-color-step-250);
-  border-radius: 8px;
-  background: transparent;
+
+.main-content {
+  position: relative;
+  --padding-start: 0;
+  --padding-end: 0;
+  --padding-bottom: 0;
+  --padding-top: 0;
+}
+
+.content-wrapper {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) min-content;
+  gap: 0;
+  height: 100%;
+}
+
+.virtual-scrollbar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.player {
+  padding: 1em;
+  background-color: var(--player-background-color);
+  z-index: 1; // needed for the box-shadow to go over last recording
+}
+
+.details-actions {
+  display: flex;
+  justify-content: space-between;
+}
+
+.phone-link {
   color: var(--ion-color-primary);
-  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.actions {
+  align-self: end;
+}
+
+.subtitle {
+  color: RGB(var(--ion-text-color-rgb));
+}
+
+.subtitle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5em;
+}
+
+.call-direction-icon {
+  height: 0.7rem;
+  width: 0.7rem;
+}
+
+.items {
+  padding: 0 1em;
+  margin: 0;
+  background: var(--ion-background-color);
+  height: 100%;
+  min-height: 100%;
+
+  .item {
+    margin: 0;
+    min-height: var(--item-height);
+    border-radius: 10px;
+    box-shadow: 0 5px 7px -1px rgba(51, 51, 51, 0.23);
+    transition:
+      border-color 0.2s ease-in-out,
+      background-color 0.2s ease-in-out,
+      box-shadow 0.2s ease-in-out;
+
+    &.child-item {
+      margin-left: 2em;
+      min-height: 44px;
+      border-left: 3px solid var(--ion-color-step-300);
+      background-color: var(--ion-color-step-50);
+      box-shadow: 0 2px 4px -1px rgba(51, 51, 51, 0.1);
+
+      ion-card-header {
+        padding: 8px 12px;
+      }
+
+      .subtitle {
+        min-height: 28px;
+        align-items: center;
+        line-height: 20px;
+      }
+
+    }
+
+    &.selected {
+      height: unset;
+      border: 2px solid var(--item-border-color-selected);
+      background-color: var(--ion-item-background-selected);
+      box-shadow: 0px 0px 4px 1px var(--item-border-color-selected);
+      border-radius: 10px;
+
+      &.child-item {
+        min-height: var(--item-height);
+
+        ion-card-header {
+          padding: 16px;
+        }
+      }
+    }
+
+    .checkbox {
+      margin-left: 1em;
+    }
+
+    .content {
+      display: flex;
+      flex-direction: column;
+      gap: 1em;
+    }
+
+    .actions {
+      display: flex;
+      gap: 1.25em;
+      justify-content: flex-end;
+      color: var(--ion-color-step-600);
+    }
+
+    .action {
+      font-size: 2em;
+      line-height: 2em;
+    }
+  }
+}
+
+// revert some customizations in multiline mode
+.multiselect .item.selected {
+  height: var(--item-height);
 }

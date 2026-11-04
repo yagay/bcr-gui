@@ -104,15 +104,9 @@ public class AudioPlayerService extends MediaSessionService {
     powerManager = (PowerManager) getSystemService(POWER_SERVICE);
 
     // create an Intent for the "bring-to-front" action to be linked in notifications
-    // In BCR Suite the launcher is SuiteGuiActivity, not GUI MainActivity.
-    // Resolve the actual launcher so a playback notification returns to the
-    // correct GUI page in both standalone and combined APKs.
-    var customIntent = getPackageManager().getLaunchIntentForPackage(getPackageName());
-    if (customIntent == null) {
-      customIntent = new Intent(getApplicationContext(), MainActivity.class);
-      customIntent.setAction(Intent.ACTION_MAIN);
-      customIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-    }
+    var customIntent = new Intent(getApplicationContext(), MainActivity.class);
+    customIntent.setAction(Intent.ACTION_MAIN);
+    customIntent.addCategory(Intent.CATEGORY_LAUNCHER);
 
     // PendingIntent run when clicking on notification content
     bringAppToForegroundIntent = PendingIntent.getActivity(
@@ -140,17 +134,6 @@ public class AudioPlayerService extends MediaSessionService {
   @Override
   public MediaSession onGetSession(MediaSession.ControllerInfo controllerInfo) {
     return mediaSession;
-  }
-
-  /**
-   * Media3 would otherwise create its own notification while paused, even
-   * after the app's explicit notification was cancelled. Make playback state
-   * the only source of truth for the single custom foreground notification.
-   */
-  @Override
-  @OptIn(markerClass = UnstableApi.class)
-  public void onUpdateNotification(MediaSession session, boolean startInForegroundRequired) {
-    setPlaybackNotificationVisible(player != null && player.isPlaying());
   }
 
   @Override
@@ -183,8 +166,7 @@ public class AudioPlayerService extends MediaSessionService {
   @OptIn(markerClass = UnstableApi.class)
   public void load(PluginCall call) {
 
-    // Even a player still in STATE_BUFFERING must be released.
-    if (player != null) {
+    if (isLoaded) {
       unload();
     }
 
@@ -216,23 +198,18 @@ public class AudioPlayerService extends MediaSessionService {
       setOutputDevice(DEVICE_LOUDSPEAKER);
       player.setMediaItem(mediaItem);
 
-      // Any callbacks from a released old ExoPlayer must not change the
-      // new session's readiness, notification or foreground state.
-      final ExoPlayer preparedPlayer = player;
+      // attach events listener
       player.addListener(new ExoPlayer.Listener() {
         @Override
         public void onPlaybackStateChanged(int playbackState) {
-          if (player != preparedPlayer) return;
           switch (playbackState) {
             case ExoPlayer.STATE_READY:
               // this state is returned both after prepare and after Play/Pause changes
               if (isPreparing) {
                 isPreparing = false;
                 var res = new JSObject();
-                // The JS ready callback may immediately request play().
-                // Mark the native service loaded BEFORE dispatching it.
-                isLoaded = true;
                 plugin.sendJSEvent("playerReady", res);
+                isLoaded = true;
                 // reset playback speed
                 setPlaybackSpeed();
               }
@@ -252,14 +229,13 @@ public class AudioPlayerService extends MediaSessionService {
 
         @Override
         public void onIsPlayingChanged(boolean isPlaying) {
-          if (player != preparedPlayer) return;
           if (isPlaying) {
             // acquire wakelock (if enabled)
             if (wakeLockPlay != null && !wakeLockPlay.isHeld()) {
               wakeLockPlay.acquire(4 * 60 * 60 * 1000L /* 4 hours */);
             }
-            // Only actual playback, never loaded/paused state, posts a notification.
-            setPlaybackNotificationVisible(true);
+            // set service as foreground
+            startForeground(NOTIFICATION_ID, createNotification());
             startUpdateTask();
           } else {
             // release wakelock (if enabled)
@@ -267,8 +243,10 @@ public class AudioPlayerService extends MediaSessionService {
               wakeLockPlay.release();
             }
             stopUpdateTask();
-            // Stop foreground AND remove the notification immediately.
-            setPlaybackNotificationVisible(false);
+            // remove service from foreground
+            stopForeground(false);
+            // delete notification (call above with "true" doesn't always work)
+            cancelNotification();
           }
         }
       });
@@ -295,8 +273,6 @@ public class AudioPlayerService extends MediaSessionService {
       player.prepare();
 
     } catch (Exception e) {
-      // Preparation errors must not leave a half-initialized session behind.
-      unload();
       call.reject("Error initializing player for audio file: " + fileUriStr + " - " + e.getMessage());
       return;
     }
@@ -314,25 +290,14 @@ public class AudioPlayerService extends MediaSessionService {
   }
 
   public void unload() {
-    // A rapid switch can arrive before STATE_READY / isLoaded. Always release
-    // any created player and the associated MediaSession and listeners.
-    isPreparing = false;
-    isLoaded = false;
-    stopUpdateTask();
-    if (player != null) {
+    if (isLoaded) {
+      stop();
       player.release();
-      player = null;
-    }
-    if (mediaSession != null) {
       mediaSession.release();
-      mediaSession = null;
+      releaseProximitySensor();
+      player = null;
+      isLoaded = false;
     }
-    if (wakeLockPlay != null && wakeLockPlay.isHeld()) {
-      wakeLockPlay.release();
-    }
-    wakeLockPlay = null;
-    releaseProximitySensor();
-    setPlaybackNotificationVisible(false);
   }
 
   /**
@@ -366,9 +331,8 @@ public class AudioPlayerService extends MediaSessionService {
   }
 
   private void pause() {
-    if (player != null) player.pause();
+    player.pause();
     stopUpdateTask();
-    setPlaybackNotificationVisible(false);
   }
 
   /**
@@ -384,9 +348,9 @@ public class AudioPlayerService extends MediaSessionService {
   }
 
   private void stop() {
-    if (player != null && player.isPlaying()) player.stop();
-    stopUpdateTask();
-    setPlaybackNotificationVisible(false);
+    if (player != null && player.isPlaying()) {
+      player.stop();
+    }
   }
 
   /**
@@ -628,18 +592,6 @@ public class AudioPlayerService extends MediaSessionService {
   /**
    * Create notification
    */
-  private void setPlaybackNotificationVisible(boolean playing) {
-    if (playing) {
-      if (!isNotificationVisible) {
-        startForeground(NOTIFICATION_ID, createNotification());
-      }
-    } else if (isNotificationVisible) {
-      // stopForeground(false) leaves the old notification in the shade.
-      stopForeground(STOP_FOREGROUND_REMOVE);
-      cancelNotification();
-    }
-  }
-
   private Notification createNotification() {
     var builder = notificationBuilder
       .setContentTitle(notificationTitle)
@@ -670,7 +622,6 @@ public class AudioPlayerService extends MediaSessionService {
    */
   private void cancelNotification() {
     if (isNotificationVisible) {
-      isNotificationVisible = false;
       notificationManager.cancel(NOTIFICATION_ID);
     }
   }

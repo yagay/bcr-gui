@@ -4,10 +4,7 @@ import { ActionButton, HeaderComponent } from 'src/app/components/header/header.
 import { VirtualScrollbarComponent } from 'src/app/components/virtual-scrollbar/virtual-scrollbar.component';
 import { LongPressDirective } from 'src/app/directives/long-press.directive';
 import { RecordingGroupsService } from 'src/app/features/recording-groups/recording-groups.service';
-import { CallFilter, CallHistoryRow, buildCallHistoryRows, callSourceLabel, filterCallRecordings, isVoipRecording, localDayKey } from 'src/app/features/call-history/call-history';
-import { CallInlinePlayerComponent } from 'src/app/features/call-history/call-inline-player.component';
-import { historyActionRecords, visibleHistoryRecordings } from 'src/app/features/call-history/history-view-model';
-import { CallDetailSheetComponent } from 'src/app/features/call-history/call-detail-sheet.component';
+import { RecordingGroupTitleComponent } from 'src/app/features/recording-groups/recording-group-title.component';
 import { IonicBundleModule } from 'src/app/IonicBundle.module';
 import { Recording } from 'src/app/models/recording';
 import { DatetimePipe } from 'src/app/pipes/datetime.pipe';
@@ -20,7 +17,8 @@ import { MessageBoxService } from 'src/app/services/message-box.service';
 import { RecordingsService } from 'src/app/services/recordings.service';
 import { SettingsService } from 'src/app/services/settings.service';
 import { filterList } from 'src/app/utils/filterList';
-import { SortModeEnum, sortRecordings } from 'src/app/utils/recordings-sorter';
+import { sortRecordings } from 'src/app/utils/recordings-sorter';
+import { bringIntoView } from 'src/app/utils/scroll';
 import { untilTrue } from 'src/app/utils/waitForAsync';
 import { AndroidSAF } from 'src/plugins/androidsaf';
 import { ErrorCode } from 'src/plugins/bcrgui';
@@ -42,14 +40,13 @@ import version from '../../version';
   imports: [
     AudioPlayerComponent,
     CallIconComponent,
-    CallInlinePlayerComponent,
-    CallDetailSheetComponent,
     DatetimePipe,
     FilesizePipe,
     FormsModule,
     HeaderComponent,
     IonicBundleModule,
     LongPressDirective,
+    RecordingGroupTitleComponent,
     ScrollingModule,
     ToHmsPipe,
     TranslatePipe,
@@ -68,36 +65,6 @@ export class MainPage implements AfterViewInit {
   protected isMultiselect = signal(false);
   protected isSearch = signal(false);
   protected searchValue = signal('');
-  protected callFilter = signal<CallFilter>('all');
-  // Preserve upstream history visibility: never hide older recordings on first launch.
-  // Contact-group summaries remain available via the explicit toggle.
-  protected showEachRecording = signal(true);
-  protected detailGroupKey = signal<string | undefined>(undefined);
-  // The details selection must identify the tapped recording, not just its
-  // contact. The contact group is used only in grouped view.
-  protected detailRecording = signal<Recording | undefined>(undefined);
-  protected playerExpanded = signal(false);
-  // Latest tap wins: stale readiness polls must never play the old recording.
-  private playbackRequestId = 0;
-  private pendingPlayback?: Recording;
-  protected filterLabels = [
-    { key: 'all' as const, zh: '全部', en: 'All' },
-    { key: 'in' as const, zh: '来电', en: 'Incoming' },
-    { key: 'out' as const, zh: '去电', en: 'Outgoing' },
-    { key: 'voip' as const, zh: 'VoIP', en: 'VoIP' },
-  ];
-  protected isZh = /^zh\b/i.test(navigator.language);
-  protected callHistoryLabels = {
-    details: this.isZh ? '通话详情' : 'Call details',
-    close: this.isZh ? '关闭' : 'Close',
-    empty: this.isZh ? '没有符合条件的录音' : 'No matching recordings',
-    recordings: this.isZh ? '条录音' : 'recordings',
-    share: this.isZh ? '分享' : 'Share',
-    delete: this.isZh ? '删除' : 'Delete',
-    edit: this.isZh ? '编辑' : 'Edit',
-    play: this.isZh ? '播放' : 'Play',
-    audio: this.isZh ? '录音' : 'Recording',
-  };
   actionButtons: ActionButton[] = [
     {
       icon: () => this.searchValue() ? 'search-circle' : 'search-circle-outline',
@@ -122,10 +89,7 @@ export class MainPage implements AfterViewInit {
       this.searchValue(),
       r => `${r.opName} ${r.opNumber}`
     );
-    const sortedItems = sortRecordings(
-      filterCallRecordings(filteredItems, this.callFilter()),
-      this.settings.recordingsSortMode,
-    );
+    const sortedItems = sortRecordings(filteredItems, this.settings.recordingsSortMode);
 
     // Preserve the upstream behavior: a selected recording must be cleared when
     // it is no longer part of the filtered list.
@@ -145,47 +109,18 @@ export class MainPage implements AfterViewInit {
     this.settings.defaultCountryPrefix,
   ));
 
-  // A fixed-height virtual list contains ONE summary per contact/number.
-  // Group history lives in a separate sheet: expanding never alters row height.
-  protected items = computed(() => visibleHistoryRecordings(
-    this.sortedItems(),
+  // filtered and grouped items collection
+  protected items = computed(() => this.recordingGroups.flattenGroups(
     this.groups(),
-    this.showEachRecording(),
     this.settings.recordingsSortMode,
+    this.settings.defaultCountryPrefix,
   ));
-  // An extra fixed-height virtual item appears immediately below the call
-  // whose playback button was pressed. No row changes its height on expansion.
-  protected virtualItems = computed<CallHistoryRow[]>(() => buildCallHistoryRows(
-    this.items(), this.selectedItem(), this.playerExpanded(),
-    item => this.showEachRecording() ? item.audioUri : this.getGroupKey(item),
-  ));
-  protected totalRecordingCount = computed(() => this.recordingsService.recordings().length);
-  protected filteredRecordingCount = computed(() => this.sortedItems().length);
-  protected groupCount = computed(() => this.groups().size);
-  protected toggleRecordView() {
-    this.closeDetails();
-    this.clearSelection();
-    this.showEachRecording.update(value => !value);
-    this.scrollViewport()?.scrollToIndex(0);
-    this.refreshViewportLayout();
-  }
-  protected detailRecords = computed(() => {
-    const selected = this.detailRecording();
-    if (!selected) return [];
-    if (this.showEachRecording()) return [selected];
-    const key = this.detailGroupKey();
-    return key ? (this.groups().get(key) ?? []) : [];
-  });
-  protected detailHeading = computed(() => {
-    const record = this.detailRecords()[0];
-    return record ? this.callerLabel(record) : this.callHistoryLabels.details;
-  });
 
   protected topIndex = 0; // index of top shown recording
-  protected itemHeight = 86;
-  protected itemGap = 0;
+  protected itemHeight = 78;
+  protected itemGap = 12;
 
-  protected player = viewChild(AudioPlayerComponent);
+  private player = viewChild(AudioPlayerComponent);
   private scrollViewport = viewChild(CdkVirtualScrollViewport);
   private searchBar = viewChild(IonSearchbar);
 
@@ -235,23 +170,24 @@ export class MainPage implements AfterViewInit {
     await untilTrue(() => this.recordingsService.refreshProgress() === undefined);
 
     this.clearFilter();
-    this.setCallFilter('all');
     this.isMultiselect.set(false);
 
     // Find the requested file in the full list and expand its contact first. An
     // older recording is intentionally absent from the collapsed display list.
     const playItem = this.sortedItems().find(i => i.audioUri === viewIntentFilename);
     if (playItem) {
-      const key = this.getGroupKey(playItem);
-      const playItemIx = this.items().findIndex(i => this.showEachRecording()
-        ? i.audioUri === playItem.audioUri
-        : this.getGroupKey(i) === key);
+      this.recordingGroups.expand(playItem, this.settings.defaultCountryPrefix);
+      const playItemIx = this.items().findIndex(i => i === playItem);
 
       // ensure it's visible
-      if (playItemIx >= 0) this.scrollViewport()?.scrollToIndex(playItemIx);
+      this.scrollViewport()?.scrollToIndex(playItemIx);
 
-      // Route VIEW intents through the same guarded switch path as row Play.
-      await this.playFromDetails(playItem, true);
+      // select & play it (need to wait for player initialization)
+      playItem.selected = true;
+      this.selectedItem.set(playItem);
+      this.cdr.detectChanges(); // forcibly detect the .selected change above
+      await untilTrue(() => this.player()?.recording() === playItem && this.player()!.isReady());
+      this.player()?.play();
 
     }
     else if (!forceListRefresh) {
@@ -282,43 +218,18 @@ export class MainPage implements AfterViewInit {
     // this._subs.unsubscribe();
   }
 
-  /**
-   * Ionic may measure the CDK viewport before the page has its final height.
-   * Recheck after navigation and asynchronous SAF indexing so the entire
-   * recording list is rendered rather than only its initial few rows.
-   */
-  private refreshViewportLayout(): void {
-    requestAnimationFrame(() => {
-      this.cdr.detectChanges();
-      this.scrollViewport()?.checkViewportSize();
-    });
-  }
-
-  async ionViewDidEnter() {
-    this.refreshViewportLayout();
-  }
-
   async ngAfterViewInit() {
     await this.recordingsService.initialize();
-    this.refreshViewportLayout();
   }
 
-  async refreshList(event?: RefresherCustomEvent) {
+  refreshList(event?: RefresherCustomEvent) {
+    event?.target.complete();
     this.clearSelection();
-    try {
-      await this.recordingsService.refreshContent();
-    } finally {
-      event?.target.complete();
-      this.refreshViewportLayout();
-    }
+    return this.recordingsService.refreshContent();
   }
 
   clearSelection() {
-    // Cancel any pending play-before-ready request as well as the visual row.
-    ++this.playbackRequestId;
-    this.pendingPlayback = undefined;
-    this.playerExpanded.set(false);
-    this.recordingsService.recordings().forEach(r => r.selected = false);
+    this.recordingsService.recordings().forEach(r => r.selected = false); // remove flag from itemsAll, just to stay safe...😉
     this.selectedItem.set(undefined);
     this.isMultiselect.set(false);
   }
@@ -343,160 +254,6 @@ export class MainPage implements AfterViewInit {
     // this.updateFilter();
   }
 
-  protected setCallFilter(filter: CallFilter) {
-    if (this.callFilter() === filter) return;
-    this.closeDetails();
-    this.clearSelection();
-    this.callFilter.set(filter);
-    this.scrollViewport()?.scrollToIndex(0);
-    this.refreshViewportLayout();
-  }
-
-  protected filterLabel(label: { zh: string; en: string }): string {
-    return this.isZh ? label.zh : label.en;
-  }
-
-  protected sourceLabel(item: Recording): string {
-    return callSourceLabel(item);
-  }
-
-  protected callerLabel(item: Recording): string {
-    if (isVoipRecording(item)) {
-      return `${callSourceLabel(item)} · ${this.isZh ? '语音通话' : 'voice call'}`;
-    }
-    return item.opName || item.opNumber;
-  }
-
-  protected isNewDay(item: Recording): boolean {
-    if (this.settings.recordingsSortMode !== SortModeEnum.Date_ASC &&
-        this.settings.recordingsSortMode !== SortModeEnum.Date_DESC) return false;
-    const index = this.items().indexOf(item);
-    return index === 0 || (index > 0 &&
-      localDayKey(item.date) !== localDayKey(this.items()[index - 1].date));
-  }
-
-  /**
-   * Use a concise, locale-aware date/time in history rows. Keep the user's
-   * 12/24-hour preference without exposing the raw ISO-like settings format.
-   */
-  protected callDateTime(item: Recording): string {
-    if (!Number.isFinite(item.date) || item.date <= 0) return '';
-    const date = new Date(item.date);
-    if (!Number.isFinite(date.getTime())) return '';
-    return new Intl.DateTimeFormat(this.isZh ? 'zh-CN' : 'en-GB', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: this.settings.is12Hours,
-    }).format(date);
-  }
-
-  protected dayLabel(item: Recording): string {
-    if (!Number.isFinite(item.date) || item.date <= 0) return '';
-    const day = localDayKey(item.date);
-    const today = localDayKey(Date.now());
-    const yesterday = localDayKey(Date.now() - 86400000);
-    if (day === today) return this.isZh ? '今天' : 'Today';
-    if (day === yesterday) return this.isZh ? '昨天' : 'Yesterday';
-    return new Intl.DateTimeFormat(this.isZh ? 'zh-CN' : undefined,
-      { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(item.date));
-  }
-
-  /** Single-record view acts on one recording; grouped view acts on a contact. */
-  private recordsForAction(item: Recording): Recording[] {
-    return historyActionRecords(
-      item, this.groups(), this.getGroupKey(item), this.showEachRecording(),
-    );
-  }
-
-  protected openDetails(item: Recording) {
-    if (this.isMultiselect()) {
-      const targets = this.recordsForAction(item);
-      const next = !targets.every(record => record.selected);
-      targets.forEach(record => record.selected = next);
-      if (!this.getSelectedItems().length) this.isMultiselect.set(false);
-      this.cdr.markForCheck();
-      return;
-    }
-    this.detailRecording.set(item);
-    this.detailGroupKey.set(this.getGroupKey(item));
-  }
-
-  protected closeDetails() {
-    this.detailGroupKey.set(undefined);
-    this.detailRecording.set(undefined);
-  }
-
-  protected async playFromDetails(item: Recording, forcePlay = false, keepDetails = false) {
-    // When playback originates inside contact history, keep that sheet open.
-    // The selected recording's inline progress will appear under its row.
-    if (!keepDetails) this.closeDetails();
-
-    // Double tapping while the same file is still preparing should not launch
-    // two plays or cancel its one pending request.
-    if (this.pendingPlayback === item) return;
-
-    const current = this.selectedItem() === item;
-    const currentPlayer = this.player();
-    if (current && currentPlayer?.isReadyFor(item)) {
-      this.playerExpanded.set(true);
-      ++this.playbackRequestId;
-      if (forcePlay) await currentPlayer.play();
-      else await currentPlayer.togglePlayPause();
-      return;
-    }
-
-    if (!current) {
-      // Change selection synchronously; a single AudioPlayerComponent is kept
-      // mounted and its native load/unload queue handles the actual switch.
-      this.clearSelection();
-      item.selected = true;
-      this.selectedItem.set(item);
-    }
-
-    const request = ++this.playbackRequestId;
-    this.pendingPlayback = item;
-    this.playerExpanded.set(true);
-    this.cdr.detectChanges();
-    this.scrollViewport()?.checkViewportSize();
-
-    try {
-      // A subsequent tap cancels this wait without generating a timeout alert.
-      await untilTrue(
-        () => request !== this.playbackRequestId ||
-          (this.selectedItem() === item && this.player()?.isReadyFor(item) === true),
-        75, 12000,
-      );
-      if (request !== this.playbackRequestId || this.selectedItem() !== item) return;
-      await this.player()?.play();
-    } catch (error) {
-      if (request === this.playbackRequestId) this.mbs.showError({ error });
-    } finally {
-      if (request === this.playbackRequestId) this.pendingPlayback = undefined;
-    }
-  }
-
-  protected async togglePlayback() {
-    await this.player()?.togglePlayPause();
-  }
-
-  protected async seekInline(position: number) {
-    await this.player()?.seekTo(position);
-  }
-
-  protected async changeInlineSpeed() {
-    await this.player()?.toggleSpeed();
-  }
-
-  protected closePlayer() {
-    ++this.playbackRequestId;
-    this.pendingPlayback = undefined;
-    void this.player()?.pause();
-    this.clearSelection();
-  }
-
   /** Toggle expansion for a contact group. */
   protected toggleExpand(groupKey: string) {
     if (this.expandedGroupKey() === groupKey) {
@@ -511,7 +268,27 @@ export class MainPage implements AfterViewInit {
   }
 
   protected onCardClick(item: Recording) {
-    this.openDetails(item);
+    const key = this.getGroupKey(item);
+
+    if (!this.isMultiselect() && this.expandedGroupKey() !== key) {
+      this.expandedGroupKey.set(undefined);
+    }
+
+    if (!this.isMultiselect() && this.isGroupHeader(item) && this.getGroupCount(item) > 1) {
+      const isExpanded = this.expandedGroupKey() === key;
+
+      // Switching from an older recording back to the latest one must keep the
+      // history visible. Collapse only when the latest recording is already
+      // selected and the user taps the same contact again.
+      if (!isExpanded || item.selected) {
+        this.toggleExpand(key);
+      }
+
+      this.onItemClick(item);
+    }
+    else {
+      this.onItemClick(item);
+    }
   }
 
   /**
@@ -557,8 +334,9 @@ export class MainPage implements AfterViewInit {
       }
       item.selected = true;
       this.selectedItem.set(item);
-      // Never scroll to a dynamically expanded card: the list has fixed-height rows.
-      this.playerExpanded.set(false);
+      if (!this.isMultiselect()) {
+        bringIntoView('.items .selected');
+      }
     }
 
   }
@@ -576,13 +354,10 @@ export class MainPage implements AfterViewInit {
       message: this.i18n.get('HOME_DELETE_CONFIRM_TEXT', items.length),
       confirmText: this.i18n.get('LBL_DELETE'),
       onConfirm: async () => {
-        // Close the sheet before deleting its recording objects so the view
-        // never retains a stale row from an old contact group.
-        this.closeDetails();
+        // forcibly unload audio
         await this.player()?.unload();
-        await this.recordingsService.deleteRecording(items);
+        this.recordingsService.deleteRecording(items);
         this.clearSelection();
-        this.refreshViewportLayout();
       }
     });
 
@@ -733,7 +508,7 @@ export class MainPage implements AfterViewInit {
   /**
    * Show Android share dialog to share an audio file
    */
-  async shareRecording(item: Recording, _event?: MouseEvent) {
+  async shareRecording(item: Recording, event: MouseEvent) {
 
     // stop player
     await this.stopPlayer();
@@ -772,12 +547,13 @@ Duration: ${this.toHms.transform(item.duration)}
    * Start multiselection and select the given item
    */
   protected startMultiselection(item?: Recording) {
-    if (this.isMultiselect()) return;
-    this.closeDetails();
-    this.clearSelection();
-    this.isMultiselect.set(true);
-    if (item) this.recordsForAction(item).forEach(record => record.selected = true);
-    this.cdr.markForCheck();
+    if (!this.isMultiselect()) {
+      this.clearSelection();
+      this.isMultiselect.set(true);
+      if (item) {
+        item.selected = true;
+      }
+    }
   }
 
   /**
@@ -791,8 +567,6 @@ Duration: ${this.toHms.transform(item.duration)}
    * Stop player (if it exists)
    */
   private async stopPlayer() {
-    ++this.playbackRequestId;
-    this.pendingPlayback = undefined;
     await this.player()?.pause();
   }
 
@@ -805,13 +579,14 @@ Duration: ${this.toHms.transform(item.duration)}
     if (selectedItemIndex >= 0) {
       const newSelectedItem = this.sortedItems()[selectedItemIndex + (direction === 'next' ? +1 : -1)];
       if (newSelectedItem) {
-        void this.playFromDetails(newSelectedItem, true);
+        this.recordingGroups.expand(newSelectedItem, this.settings.defaultCountryPrefix);
+        this.onItemClick(newSelectedItem);
       }
     }
   }
 
-  protected trackByVirtualRow(_index: number, item: CallHistoryRow) {
-    return item.key;
+  protected trackByUri(idx: number, item: Recording) {
+    return item.audioUri;
   }
 
 }

@@ -1,7 +1,0 @@
-{
-  "extends": "./tsconfig.spec.json",
-  "files": [],
-  "include": [
-    "src/app/features/call-history/call-history.spec.ts"
-  ]
-}
