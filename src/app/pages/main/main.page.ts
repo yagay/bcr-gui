@@ -368,6 +368,24 @@ export class MainPage implements AfterViewInit {
       localDayKey(item.date) !== localDayKey(this.items()[index - 1].date));
   }
 
+  /**
+   * Use a concise, locale-aware date/time in history rows. Keep the user's
+   * 12/24-hour preference without exposing the raw ISO-like settings format.
+   */
+  protected callDateTime(item: Recording): string {
+    if (!Number.isFinite(item.date) || item.date <= 0) return '';
+    const date = new Date(item.date);
+    if (!Number.isFinite(date.getTime())) return '';
+    return new Intl.DateTimeFormat(this.isZh ? 'zh-CN' : 'en-GB', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: this.settings.is12Hours,
+    }).format(date);
+  }
+
   protected dayLabel(item: Recording): string {
     if (!Number.isFinite(item.date) || item.date <= 0) return '';
     const day = localDayKey(item.date);
