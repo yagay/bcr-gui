@@ -33,4 +33,6 @@ assert(layout.includes('display:flex;') || layout.includes('display:flex'),
 assert(layout.includes('flex:1 1 0;'), 'Ionic content must get remaining page height at first entry');
 assert(controller.includes('ResizeObserver'), 'Viewport must react to first-page size changes');
 assert(controller.includes('this.displayRows().length;'), 'SAF index updates must trigger CDK remeasurement');
+assert(layout.includes('--history-navigation-clearance'), 'History must reserve space for system navigation');
+assert(layout.includes('padding-bottom: var(--history-navigation-clearance)'), 'Navigation clearance must belong to the scroll viewport region');
 console.log('Recording GUI architecture checks passed.');
