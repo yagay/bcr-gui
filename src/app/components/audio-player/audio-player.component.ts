@@ -42,6 +42,7 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   private removePlayCompletedListener?: () => Promise<void>;
   // Android exposes one native player; never overlap load/unload operations.
   private loadQueue: Promise<void> = Promise.resolve();
+  private transportQueue: Promise<void> = Promise.resolve();
   private loadGeneration = 0;
   private loadedRecording?: Recording;
   private nativeLoadAttempted = false;
@@ -173,6 +174,8 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   }
 
   private async releaseCurrent() {
+    // Native play/pause/seek must complete before a new load/unload begins.
+    await this.transportQueue.catch(() => {});
     this.ready.set(false);
     this.loadedRecording = undefined;
     this.status.set(PlayerStatusEnum.Paused);
@@ -241,27 +244,46 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Toggle between play and pause
+   * All native transport commands use one serial queue. Each command checks
+   * the generation both before AND after the native Promise resolves, so a
+   * stale play response cannot mark the next recording as playing.
    */
-  public async togglePlayPause() {
-    if (this.status() === PlayerStatusEnum.Paused) {
-      return this.play();
-    }
-    else {
-      return this.pause();
-    }
+  private enqueueTransport(action: (generation: number) => Promise<void>): Promise<void> {
+    const generation = this.loadGeneration;
+    this.transportQueue = this.transportQueue.catch(() => {}).then(async () => {
+      if (!this.ready() || generation !== this.loadGeneration || this.destroying) return;
+      try {
+        await action(generation);
+      } catch (error) {
+        if (generation === this.loadGeneration && !this.destroying) {
+          this.showError(error, 'transport');
+        }
+      }
+    });
+    return this.transportQueue;
   }
 
-  /**
-   * Play the given record file (already loaded with load())
-   */
-  async play() {
-    if (!this.ready() || !this.loadedRecording) return;
-    return AudioPlayer.play()
-      .then(async _ => {
+  public async togglePlayPause(): Promise<void> {
+    return this.enqueueTransport(async generation => {
+      const playing = this.status() === PlayerStatusEnum.Playing;
+      if (playing) await AudioPlayer.pause();
+      else await AudioPlayer.play();
+      if (generation === this.loadGeneration && !this.destroying) {
+        this.status.set(playing ? PlayerStatusEnum.Paused : PlayerStatusEnum.Playing);
+        this.cdr.markForCheck();
+      }
+    });
+  }
+
+  async play(): Promise<void> {
+    return this.enqueueTransport(async generation => {
+      if (this.status() === PlayerStatusEnum.Playing) return;
+      await AudioPlayer.play();
+      if (generation === this.loadGeneration && !this.destroying) {
         this.status.set(PlayerStatusEnum.Playing);
-      })
-      .catch(error => this.showError(error, 'play()'));
+        this.cdr.markForCheck();
+      }
+    });
   }
 
   /**
@@ -310,32 +332,27 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   }
 
   /** Shared seek implementation for the original player and the inline row. */
-  public async seekTo(position: number) {
-    if (!Number.isFinite(position) || !this.ready()) return;
-    const clamped = Math.max(0, Math.min(position, this.duration()));
-    try {
+  public async seekTo(position: number): Promise<void> {
+    if (!Number.isFinite(position)) return;
+    return this.enqueueTransport(async generation => {
+      const clamped = Math.max(0, Math.min(position, this.duration()));
       await AudioPlayer.setCurrentPosition({ position: clamped * 1000 });
-      this.progress.set(clamped);
-      this.cdr.markForCheck();
-    } catch (error) {
-      this.showError(error, 'seekTo()');
-    }
+      if (generation === this.loadGeneration && !this.destroying) {
+        this.progress.set(clamped);
+        this.cdr.markForCheck();
+      }
+    });
   }
 
-  /**
-   * Pause the playing media file
-   */
-  async pause() {
-    if (!this.ready() || this.status() !== PlayerStatusEnum.Playing) {
-      return;
-    }
-
-    // pause audio
-    await AudioPlayer.pause()
-      .then(_ => {
+  async pause(): Promise<void> {
+    return this.enqueueTransport(async generation => {
+      if (this.status() !== PlayerStatusEnum.Playing) return;
+      await AudioPlayer.pause();
+      if (generation === this.loadGeneration && !this.destroying) {
         this.status.set(PlayerStatusEnum.Paused);
-      })
-      .catch(error => this.showError(error, 'pause()'));
+        this.cdr.markForCheck();
+      }
+    });
   }
 
   /**
