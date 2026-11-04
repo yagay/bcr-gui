@@ -139,54 +139,32 @@
   </div>
 </ion-content>
 
-<!-- Details are separate from the virtual list so row heights never change. -->
-<ion-modal [isOpen]="detailGroupKey() !== undefined"
-  [initialBreakpoint]="0.72" [breakpoints]="[0, 0.72, 1]"
+<!-- Contact details render in their own sheet and share the one native player. -->
+<ion-modal class="call-detail-modal"
+  [isOpen]="detailGroupKey() !== undefined"
+  [initialBreakpoint]="0.86" [breakpoints]="[0, 0.86, 1]"
+  [handle]="true"
   (didDismiss)="closeDetails()">
   <ng-template>
-    <ion-header>
-      <ion-toolbar>
-        <ion-title>{{ detailHeading() }}</ion-title>
-        <ion-buttons slot="end">
-          <ion-button (click)="closeDetails()" aria-label="Close call details">
-            <ion-icon name="close" slot="icon-only" />
-          </ion-button>
-        </ion-buttons>
-      </ion-toolbar>
-    </ion-header>
-    <ion-content>
-      <ion-list lines="inset">
-        @for (entry of detailRecords(); track entry.audioUri) {
-          <ion-item class="history-record">
-            <app-call-icon slot="start" [direction]="entry.direction" />
-            <ion-label>
-              <h2>{{ entry.date | datetime }}</h2>
-              <p>{{ entry.duration | toHms }} · {{ entry.filesize | filesize }}
-                @if (sourceLabel(entry)) { · {{ sourceLabel(entry) }} }
-              </p>
-              @if (isDialableNumber(entry)) {
-                <p><a [href]="getDialUri(entry)" (click)="$event.stopPropagation()">{{ entry.opNumber }}</a></p>
-              }
-            </ion-label>
-            <ion-button fill="clear" slot="end" (click)="playFromDetails(entry)"
-              [attr.aria-label]="callHistoryLabels.play">
-              <ion-icon name="play-circle-outline" slot="icon-only" />
-            </ion-button>
-            <ion-button fill="clear" slot="end" (click)="editItem(entry)"
-              [attr.aria-label]="callHistoryLabels.edit">
-              <ion-icon name="pencil-outline" slot="icon-only" />
-            </ion-button>
-            <ion-button fill="clear" slot="end" (click)="shareRecording(entry, $event)"
-              [attr.aria-label]="callHistoryLabels.share">
-              <ion-icon name="share-social-outline" slot="icon-only" />
-            </ion-button>
-            <ion-button fill="clear" color="danger" slot="end" (click)="deleteItems([entry])"
-              [attr.aria-label]="callHistoryLabels.delete">
-              <ion-icon name="trash-outline" slot="icon-only" />
-            </ion-button>
-          </ion-item>
-        }
-      </ion-list>
-    </ion-content>
+    <app-call-detail-sheet
+      [recordings]="detailRecords()"
+      [title]="detailHeading()"
+      [isZh]="isZh"
+      [playingRecording]="selectedItem()"
+      [showProgress]="playerExpanded()"
+      [position]="player()?.currentPosition() ?? 0"
+      [duration]="player()?.totalDuration() ?? 0"
+      [ready]="player()?.isReady() ?? false"
+      [playing]="player()?.isPlaying() ?? false"
+      [speed]="settings.playbackSpeed"
+      (close)="closeDetails()"
+      (play)="playFromDetails($event, false, true)"
+      (playPause)="togglePlayback()"
+      (seek)="seekInline($event)"
+      (changeSpeed)="changeInlineSpeed()"
+      (closeProgress)="closePlayer()"
+      (edit)="editItem($event)"
+      (share)="shareRecording($event)"
+      (delete)="deleteItems($event)" />
   </ng-template>
 </ion-modal>

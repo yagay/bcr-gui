@@ -6,6 +6,7 @@ import { LongPressDirective } from 'src/app/directives/long-press.directive';
 import { RecordingGroupsService } from 'src/app/features/recording-groups/recording-groups.service';
 import { CallFilter, CallHistoryRow, buildCallHistoryRows, callSourceLabel, filterCallRecordings, isVoipRecording, localDayKey } from 'src/app/features/call-history/call-history';
 import { CallInlinePlayerComponent } from 'src/app/features/call-history/call-inline-player.component';
+import { CallDetailSheetComponent } from 'src/app/features/call-history/call-detail-sheet.component';
 import { IonicBundleModule } from 'src/app/IonicBundle.module';
 import { Recording } from 'src/app/models/recording';
 import { DatetimePipe } from 'src/app/pipes/datetime.pipe';
@@ -41,6 +42,7 @@ import version from '../../version';
     AudioPlayerComponent,
     CallIconComponent,
     CallInlinePlayerComponent,
+    CallDetailSheetComponent,
     DatetimePipe,
     FilesizePipe,
     FormsModule,
@@ -353,8 +355,10 @@ export class MainPage implements AfterViewInit {
     this.detailGroupKey.set(undefined);
   }
 
-  protected async playFromDetails(item: Recording, forcePlay = false) {
-    this.closeDetails();
+  protected async playFromDetails(item: Recording, forcePlay = false, keepDetails = false) {
+    // When playback originates inside contact history, keep that sheet open.
+    // The selected recording's inline progress will appear under its row.
+    if (!keepDetails) this.closeDetails();
 
     // Double tapping while the same file is still preparing should not launch
     // two plays or cancel its one pending request.
@@ -652,7 +656,7 @@ export class MainPage implements AfterViewInit {
   /**
    * Show Android share dialog to share an audio file
    */
-  async shareRecording(item: Recording, event: MouseEvent) {
+  async shareRecording(item: Recording, _event?: MouseEvent) {
 
     // stop player
     await this.stopPlayer();

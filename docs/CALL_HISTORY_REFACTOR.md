@@ -112,3 +112,24 @@ The standalone GUI CI runs `scripts/check-player-effect-writes.mjs`,
 an AST-based guard against new direct Signal `.set()` or `.update()`
 inside this component's effects. That guard is static; full on-device
 Angular navigation and native audio playback must still be tested.
+
+## Compact contact detail sheet (2026-11-04)
+
+The original large Ionic green toolbar and tall `ion-item` history rows were
+replaced with a dedicated `CallDetailSheetComponent`. Contact title, a dialable
+phone number (once), total recording count, and most recent local calendar day
+appear in a compact header inside the scrollable sheet. No duplicate phone
+number is printed on every recording.
+
+History rows group recordings by **local calendar date** and display only
+time, direction, duration and file size. A separate Play control opens the
+existing `CallInlinePlayerComponent` *under the selected history row*, without
+closing the contact sheet; the one `AudioPlayerComponent` native player stays
+mounted in MainPage. Each row now uses a three-dot Ionic action sheet for
+the original Edit, Share and Delete functions, and deletion retains the
+existing confirmation from `MainPage.deleteItems`.
+
+Long-pressing a row enters a local batch-selection mode with a delete action.
+The modal opens at 86% and can be pulled to full height or dismissed; no
+fixed green toolbar or tall header spacer remains. The GUI and BCR Suite
+continue to pin and sync upstream source independently.
