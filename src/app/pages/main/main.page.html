@@ -54,11 +54,12 @@
   [class.disabled]="recordingsService.refreshProgress() !== undefined">
   <div class="content-wrapper">
     <ion-list class="items" lines="none">
-      @if (topIndex === 0) {
-        <ion-refresher slot="fixed" (ionRefresh)="refreshList($any($event))">
-          <ion-refresher-content refreshingSpinner="circles" />
-        </ion-refresher>
-      }
+      <!-- Keep the refresher mounted while virtual rows scroll; toggling
+           a sibling of CDK viewport changes its measurements mid-scroll. -->
+      <ion-refresher slot="fixed" [disabled]="topIndex > 0"
+        (ionRefresh)="refreshList($any($event))">
+        <ion-refresher-content refreshingSpinner="circles" />
+      </ion-refresher>
 
       <cdk-virtual-scroll-viewport #vsv class="virtual-scroll-viewport ion-content-scroll-host"
         [itemSize]="itemHeight" (scrolledIndexChange)="onScroll($event)">
