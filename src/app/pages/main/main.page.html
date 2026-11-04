@@ -22,34 +22,12 @@
   </ion-toolbar>
 }
 
-<div class="history-filters" role="group" [attr.aria-label]="isZh ? '通话类型' : 'Call direction'">
-  <button type="button" [class.active]="directionFilter() === 'all'"
-    [attr.aria-pressed]="directionFilter() === 'all'" (click)="setDirectionFilter('all')">
-    {{ isZh ? '全部' : 'All' }}
-  </button>
-  <button type="button" [class.active]="directionFilter() === 'in'"
-    [attr.aria-pressed]="directionFilter() === 'in'" (click)="setDirectionFilter('in')">
-    {{ isZh ? '来电' : 'Incoming' }}
-  </button>
-  <button type="button" [class.active]="directionFilter() === 'out'"
-    [attr.aria-pressed]="directionFilter() === 'out'" (click)="setDirectionFilter('out')">
-    {{ isZh ? '去电' : 'Outgoing' }}
-  </button>
-</div>
-
-<div class="history-toolbar">
-  <div class="history-summary">
-    <span>{{ isZh ? '录音' : 'Recordings' }} {{ indexedCount() }}</span>
-    <span>{{ isZh ? '联系人' : 'Contacts' }} {{ groupCount() }}</span>
-    @if (searchValue() || directionFilter() !== 'all') {
-      <span>{{ isZh ? '匹配' : 'Matches' }} {{ historyIntegrity().sourceCount }}</span>
-    }
-  </div>
-  <button class="view-toggle" type="button" (click)="toggleViewMode()"
-    [attr.aria-pressed]="showAllRecordings()">
-    {{ showAllRecordings() ? (isZh ? '按联系人' : 'By contact') : (isZh ? '全部录音' : 'All recordings') }}
-  </button>
-</div>
+<app-history-controls [zh]="isZh" [direction]="directionFilter()" [total]="indexedCount()"
+  [contactCount]="groupCount()" [matches]="historyIntegrity().sourceCount"
+  [hasFilter]="!!searchValue() || directionFilter() !== 'all'"
+  [allRecordings]="showAllRecordings()" [refreshing]="isRefreshing()"
+  (directionChange)="setDirectionFilter($event)" (toggleView)="toggleViewMode()"
+  (refresh)="refreshFromToolbar()" />
 
 <ion-content id="main-content" class="main-content" [scrollY]="false">
   <div class="history-layout">
@@ -72,32 +50,18 @@
       </cdk-virtual-scroll-viewport>
       <app-virtual-scrollbar class="virtual-scrollbar" [virtualScrollViewport]="vsv" />
       @if (items().length === 0 && recordingsService.refreshProgress() === undefined) {
-        <div class="history-empty">{{ isZh ? '没有录音' : 'No recordings found' }}</div>
+        <div class="history-empty">
+          <strong>{{ isZh ? '没有匹配的录音' : 'No matching recordings' }}</strong>
+          <span>{{ isZh ? '请尝试调整搜索、筛选或录音目录' : 'Try another filter, search or recording directory' }}</span>
+        </div>
       }
     </section>
 
     @if (selectedItem() && !isMultiselect()) {
-      <section class="recording-details">
-        <div class="details-top">
-          <strong>{{ selectedItem()!.opName || selectedItem()!.opNumber }}</strong>
-          <button class="details-dismiss" type="button" (click)="clearSelection()" aria-label="Close selection">×</button>
-        </div>
-        <div class="details-meta">
-          <span>{{ selectedItem()!.date | datetime }}</span>
-          <span>{{ selectedItem()!.mimeType }}</span>
-          <span>{{ selectedItem()!.filesize | filesize }}</span>
-        </div>
-        <div class="details-actions">
-          @if (isDialableNumber(selectedItem()!)) {
-            <a class="details-call" [href]="getDialUri(selectedItem()!)">
-              <ion-icon name="call-outline" /> {{ isZh ? '拨号' : 'Call' }}
-            </a>
-          }
-          <button type="button" (click)="editItem(selectedItem()!)"><ion-icon name="pencil-outline" /> {{ isZh ? '编辑' : 'Edit' }}</button>
-          <button type="button" (click)="shareRecording(selectedItem()!)"><ion-icon name="share-outline" /> {{ isZh ? '分享' : 'Share' }}</button>
-          <button type="button" (click)="deleteItems([selectedItem()!])"><ion-icon name="trash-outline" /> {{ isZh ? '删除' : 'Delete' }}</button>
-        </div>
-      </section>
+      <app-history-details [recording]="selectedItem()!" [zh]="isZh"
+        [dialUri]="isDialableNumber(selectedItem()!) ? getDialUri(selectedItem()!) : null"
+        (close)="clearSelection()" (edit)="editItem(selectedItem()!)"
+        (share)="shareRecording(selectedItem()!)" (delete)="deleteItems([selectedItem()!])" />
       <!-- One player, outside CDK. Selecting or scrolling never remounts another. -->
       <app-audio-player #audioPlayer class="player" [recording]="selectedItem()!"
         (onSkip)="onSkip($event)" />

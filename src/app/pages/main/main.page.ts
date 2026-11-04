@@ -3,6 +3,8 @@ import { ActionButton, HeaderComponent } from 'src/app/components/header/header.
 import { VirtualScrollbarComponent } from 'src/app/components/virtual-scrollbar/virtual-scrollbar.component';
 import { RecordingGroupsService } from 'src/app/features/recording-groups/recording-groups.service';
 import { HistoryRecordingRowComponent } from 'src/app/features/recording-groups/history-recording-row.component';
+import { HistoryControlsComponent } from 'src/app/features/recording-groups/history-controls.component';
+import { HistoryDetailsComponent } from 'src/app/features/recording-groups/history-details.component';
 import { IonicBundleModule } from 'src/app/IonicBundle.module';
 import { Recording } from 'src/app/models/recording';
 import { DatetimePipe } from 'src/app/pipes/datetime.pipe';
@@ -42,6 +44,8 @@ import version from '../../version';
     HeaderComponent,
     IonicBundleModule,
     HistoryRecordingRowComponent,
+    HistoryControlsComponent,
+    HistoryDetailsComponent,
     ScrollingModule,
     ToHmsPipe,
     TranslatePipe,
