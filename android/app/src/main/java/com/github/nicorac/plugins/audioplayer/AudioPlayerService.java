@@ -104,9 +104,15 @@ public class AudioPlayerService extends MediaSessionService {
     powerManager = (PowerManager) getSystemService(POWER_SERVICE);
 
     // create an Intent for the "bring-to-front" action to be linked in notifications
-    var customIntent = new Intent(getApplicationContext(), MainActivity.class);
-    customIntent.setAction(Intent.ACTION_MAIN);
-    customIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+    // In BCR Suite the launcher is SuiteGuiActivity, not GUI MainActivity.
+    // Resolve the actual launcher so a playback notification returns to the
+    // correct GUI page in both standalone and combined APKs.
+    var customIntent = getPackageManager().getLaunchIntentForPackage(getPackageName());
+    if (customIntent == null) {
+      customIntent = new Intent(getApplicationContext(), MainActivity.class);
+      customIntent.setAction(Intent.ACTION_MAIN);
+      customIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+    }
 
     // PendingIntent run when clicking on notification content
     bringAppToForegroundIntent = PendingIntent.getActivity(
@@ -134,6 +140,17 @@ public class AudioPlayerService extends MediaSessionService {
   @Override
   public MediaSession onGetSession(MediaSession.ControllerInfo controllerInfo) {
     return mediaSession;
+  }
+
+  /**
+   * Media3 would otherwise create its own notification while paused, even
+   * after the app's explicit notification was cancelled. Make playback state
+   * the only source of truth for the single custom foreground notification.
+   */
+  @Override
+  @OptIn(markerClass = UnstableApi.class)
+  public void onUpdateNotification(MediaSession session, boolean startInForegroundRequired) {
+    setPlaybackNotificationVisible(player != null && player.isPlaying());
   }
 
   @Override
@@ -209,8 +226,10 @@ public class AudioPlayerService extends MediaSessionService {
               if (isPreparing) {
                 isPreparing = false;
                 var res = new JSObject();
-                plugin.sendJSEvent("playerReady", res);
+                // The JS ready callback may immediately request play().
+                // Mark the native service loaded BEFORE dispatching it.
                 isLoaded = true;
+                plugin.sendJSEvent("playerReady", res);
                 // reset playback speed
                 setPlaybackSpeed();
               }
@@ -235,8 +254,8 @@ public class AudioPlayerService extends MediaSessionService {
             if (wakeLockPlay != null && !wakeLockPlay.isHeld()) {
               wakeLockPlay.acquire(4 * 60 * 60 * 1000L /* 4 hours */);
             }
-            // set service as foreground
-            startForeground(NOTIFICATION_ID, createNotification());
+            // Only actual playback, never loaded/paused state, posts a notification.
+            setPlaybackNotificationVisible(true);
             startUpdateTask();
           } else {
             // release wakelock (if enabled)
@@ -244,10 +263,8 @@ public class AudioPlayerService extends MediaSessionService {
               wakeLockPlay.release();
             }
             stopUpdateTask();
-            // remove service from foreground
-            stopForeground(false);
-            // delete notification (call above with "true" doesn't always work)
-            cancelNotification();
+            // Stop foreground AND remove the notification immediately.
+            setPlaybackNotificationVisible(false);
           }
         }
       });
@@ -309,8 +326,7 @@ public class AudioPlayerService extends MediaSessionService {
     }
     wakeLockPlay = null;
     releaseProximitySensor();
-    stopForeground(false);
-    cancelNotification();
+    setPlaybackNotificationVisible(false);
   }
 
   /**
@@ -344,8 +360,9 @@ public class AudioPlayerService extends MediaSessionService {
   }
 
   private void pause() {
-    player.pause();
+    if (player != null) player.pause();
     stopUpdateTask();
+    setPlaybackNotificationVisible(false);
   }
 
   /**
@@ -361,9 +378,9 @@ public class AudioPlayerService extends MediaSessionService {
   }
 
   private void stop() {
-    if (player != null && player.isPlaying()) {
-      player.stop();
-    }
+    if (player != null && player.isPlaying()) player.stop();
+    stopUpdateTask();
+    setPlaybackNotificationVisible(false);
   }
 
   /**
@@ -605,6 +622,18 @@ public class AudioPlayerService extends MediaSessionService {
   /**
    * Create notification
    */
+  private void setPlaybackNotificationVisible(boolean playing) {
+    if (playing) {
+      if (!isNotificationVisible) {
+        startForeground(NOTIFICATION_ID, createNotification());
+      }
+    } else if (isNotificationVisible) {
+      // stopForeground(false) leaves the old notification in the shade.
+      stopForeground(STOP_FOREGROUND_REMOVE);
+      cancelNotification();
+    }
+  }
+
   private Notification createNotification() {
     var builder = notificationBuilder
       .setContentTitle(notificationTitle)
@@ -635,6 +664,7 @@ public class AudioPlayerService extends MediaSessionService {
    */
   private void cancelNotification() {
     if (isNotificationVisible) {
+      isNotificationVisible = false;
       notificationManager.cancel(NOTIFICATION_ID);
     }
   }
