@@ -216,9 +216,11 @@ export class MainPage implements AfterViewInit {
       // select & play it (need to wait for player initialization)
       playItem.selected = true;
       this.selectedItem.set(playItem);
-      this.cdr.detectChanges(); // forcibly detect the .selected change above
+      // The full seek bar must be visible when playback is started by an intent.
+      this.playerExpanded.set(true);
+      this.cdr.detectChanges(); // ensure player and seek controls are present
       await untilTrue(() => this.player()?.recording() === playItem && this.player()!.isReady());
-      this.player()?.play();
+      await this.player()?.play();
 
     }
     else if (!forceListRefresh) {
@@ -343,6 +345,9 @@ export class MainPage implements AfterViewInit {
   protected async playFromDetails(item: Recording) {
     this.closeDetails();
     if (this.selectedItem() !== item) await this.onItemClick(item);
+    // Opening the full player is part of the Play action; do not require an
+    // additional tap on the miniature bar to discover the seek controls.
+    this.playerExpanded.set(true);
     this.cdr.detectChanges();
     try {
       await untilTrue(
@@ -356,6 +361,8 @@ export class MainPage implements AfterViewInit {
   }
 
   protected async togglePlayback() {
+    // Keep the actual progress/seek panel visible for direct playback.
+    this.playerExpanded.set(true);
     await this.player()?.togglePlayPause();
   }
 

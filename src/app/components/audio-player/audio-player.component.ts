@@ -174,6 +174,9 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
    */
   public isReady() { return this.ready() };
   public isPlaying() { return this.status() === PlayerStatusEnum.Playing; }
+  /** Read-only progress for the compact controller; no second playback timer. */
+  public readonly currentPosition = this.progress.asReadonly();
+  public readonly totalDuration = this.duration.asReadonly();
 
   /**
    * Show error alert

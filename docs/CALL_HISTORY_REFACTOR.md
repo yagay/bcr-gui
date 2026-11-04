@@ -49,3 +49,15 @@ folder (if present), and recognizes both `audio/wav` and `audio/x-wav`.
 No arbitrary recursion, no additional storage permission, and no change
 to the underlying recording engine or Android privileges. Unknown
 VoIP filenames retain their ordinary file-record behavior.
+
+## Playback seek-bar regression fix
+
+The original call-history refactor collapsed the existing full player into a
+1 px hidden container, but Play did not expand it. Clicking Play on a row or
+history item now sets `playerExpanded=true` **before** loading/starting
+playback. Android VIEW intents also expand the full player.
+The mini controller displays its own read-only progress bar and elapsed/total
+time using the exact signals from the existing `AudioPlayerComponent`:
+no duplicate timer, playback engine or seek implementation is introduced.
+Tapping the compact progress bar expands the full seek controls, and manually
+collapsing the full panel keeps playback and progress updates running.
