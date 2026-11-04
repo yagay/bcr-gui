@@ -7,7 +7,7 @@
       [max]="duration() > 0 ? duration() : 1"
       [value]="dragging() ? dragPosition() : currentPosition()"
       [disabled]="!ready()"
-      [pin]="true"
+      [pin]="false"
       [ticks]="false"
       [snaps]="false"
       (ionKnobMoveStart)="onDragStart()"

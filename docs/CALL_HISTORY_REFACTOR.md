@@ -76,3 +76,18 @@ virtual viewport** while a recording is selected. The inline row only reflects
 its signals and sends actions to its playback methods, so scrolling a row out
 of view does not destroy or restart the native audio session. No duplicate
 audio engine, timer, or file reads are introduced.
+
+## Fix: inline player must not paint across later call rows
+
+The progress row has exactly the same 86px fixed size as every other CDK
+item. The first inline version allowed Ionic's range control and its pin
+tooltip to overflow beyond the allocated item, which could visually cover
+another call row despite the virtual strategy reserving a row. The inline
+player now uses a strict two-track grid inside a border-box-sized host,
+restrains `ion-range` dimensions, disables the out-of-row pin overlay
+(current time is already displayed separately) and clips the dedicated
+virtual row. This does not clip the normal contact summary or change the
+overall item count. When a recording is selected, the viewport's size
+is also checked after Angular applies the inserted row.
+
+No absolute-positioned overlay or extra blank spacer rows are used.

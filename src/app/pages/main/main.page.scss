@@ -26,7 +26,16 @@
 .virtual-scroll-viewport { height: 100%; }
 .virtual-scroll-viewport ::ng-deep .cdk-virtual-scroll-content-wrapper { width: 100%; }
 .virtual-scrollbar { position: absolute; top: 0; right: 0; bottom: 0; }
-.virtual-row { box-sizing: border-box; height: 86px; }
+.virtual-row {
+  box-sizing: border-box;
+  display: block;
+  height: 86px;
+  min-height: 86px;
+  max-height: 86px;
+  overflow: hidden;
+  position: relative;
+  contain: layout paint size;
+}
 .call-row {
   box-sizing: border-box;
   height: 100%;

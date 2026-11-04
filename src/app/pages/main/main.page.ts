@@ -227,6 +227,7 @@ export class MainPage implements AfterViewInit {
       // Show inline progress under the caller's summary row for VIEW intents.
       this.playerExpanded.set(true);
       this.cdr.detectChanges(); // ensure persistent player and inline controls exist
+      this.scrollViewport()?.checkViewportSize();
       await untilTrue(() => this.player()?.recording() === playItem && this.player()!.isReady());
       await this.player()?.play();
 
@@ -360,6 +361,9 @@ export class MainPage implements AfterViewInit {
     // in the fixed-size CDK virtual list, not at the bottom of the screen.
     this.playerExpanded.set(true);
     this.cdr.detectChanges();
+    // The additional 86px CDK row must be remeasured as an actual item
+    // before the next recording can occupy its scroll coordinates.
+    this.scrollViewport()?.checkViewportSize();
     try {
       await untilTrue(
         () => this.player()?.recording() === item && this.player()!.isReady(),
