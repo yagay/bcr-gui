@@ -158,6 +158,8 @@ export class MainPage implements AfterViewInit, OnDestroy {
   }
 
   protected canSkip(direction: SkipDirection): boolean {
+    // The previous button also rewinds the current track after 3 seconds.
+    if (direction === 'prev' && (this.player()?.currentPosition() ?? 0) >= 3) return true;
     const index = this.sortedItems().findIndex(record => record === this.selectedItem());
     const target = index + (direction === 'next' ? 1 : -1);
     return index >= 0 && target >= 0 && target < this.sortedItems().length;
