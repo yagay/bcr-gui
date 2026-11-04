@@ -3,6 +3,21 @@ import { filterList } from 'src/app/utils/filterList';
 import { SortModeEnum, sortRecordings } from 'src/app/utils/recordings-sorter';
 import { RecordingGroupsService } from './recording-groups.service';
 
+export type HistoryFilter = 'all' | 'in' | 'out' | 'voip';
+
+/** Only recordings positively identified as VoIP should enter this filter. */
+export function isVoipRecording(item: Recording): boolean {
+  return /(^|\/)voip(\/|$)/i.test(item.sourceFolder || '') ||
+    /^bcr_\d{8}_\d{6}_(whatsapp|whatsapp-business|telegram|telegram-x|signal|viber|meet|wechat)\.wav$/i.test(item.audioDisplayName || '');
+}
+
+export function filterRecordingDirection(records: Recording[], filter: HistoryFilter): Recording[] {
+  if (filter === 'all') return records;
+  if (filter === 'voip') return records.filter(isVoipRecording);
+  return records.filter(item => !isVoipRecording(item) && item.direction === filter);
+}
+
+
 /** Pure source projection. The recording store remains the only data source. */
 export function buildRecordingHistory(
   recordings: Recording[],

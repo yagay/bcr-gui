@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
-export type HistoryDirection = 'all' | 'in' | 'out';
+export type HistoryDirection = 'all' | 'in' | 'out' | 'voip';
 
 /** Stateless controls: all decisions remain in MainPage's single state model. */
 @Component({
@@ -67,5 +67,6 @@ export class HistoryControlsComponent {
     {key:'all',zh:'全部',en:'All'},
     {key:'in',zh:'来电',en:'Incoming'},
     {key:'out',zh:'去电',en:'Outgoing'},
+    {key:'voip',zh:'VoIP',en:'VoIP'},
   ];
 }

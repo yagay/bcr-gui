@@ -1,7 +1,7 @@
 import { Recording } from 'src/app/models/recording';
 import { SortModeEnum } from 'src/app/utils/recordings-sorter';
 import { RecordingGroupsService } from './recording-groups.service';
-import { buildRecordingHistory, projectRecordingHistory, historyConsistency } from './recording-history.model';
+import { buildRecordingHistory, projectRecordingHistory, historyConsistency, filterRecordingDirection } from './recording-history.model';
 
 function makeRecording(index: number, number: string): Recording {
   const r = new Recording();
@@ -82,5 +82,30 @@ describe('caller identity stability', () => {
   it('isolates hidden or private numbers with no stable identifier', () => {
     const records = [make('a', '', '<unknown>'), make('b', '', '<unknown>')];
     expect(svc.buildGroups(records, '').size).toBe(2);
+  });
+});
+
+describe('type filters and VoIP visibility', () => {
+  const rec = (uri: string, direction: Recording['direction'], sourceFolder: string, filename: string) => {
+    const item = new Recording();
+    item.audioUri = uri; item.direction = direction;
+    item.sourceFolder = sourceFolder; item.audioDisplayName = filename;
+    return item;
+  };
+  const inCall = rec('in', 'in', '', 'in.oga');
+  const outCall = rec('out', 'out', '', 'out.oga');
+  const voip = rec('voip', '', 'VoIP', 'recording.wav');
+  const standaloneWav = rec('wav', '', '', 'generic.wav');
+  it('leaves the indexed source untouched', () => {
+    const source = [inCall, outCall, voip, standaloneWav];
+    expect(filterRecordingDirection(source, 'all')).toHaveSize(4);
+    expect(source).toHaveSize(4);
+  });
+  it('filters conventional directions without misclassifying VoIP', () => {
+    expect(filterRecordingDirection([inCall, outCall, voip], 'in')).toEqual([inCall]);
+    expect(filterRecordingDirection([inCall, outCall, voip], 'out')).toEqual([outCall]);
+  });
+  it('detects known VoIP folder but not every WAV file', () => {
+    expect(filterRecordingDirection([inCall, voip, standaloneWav], 'voip')).toEqual([voip]);
   });
 });

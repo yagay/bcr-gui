@@ -16,7 +16,7 @@ import { I18nService } from 'src/app/services/i18n.service';
 import { MessageBoxService } from 'src/app/services/message-box.service';
 import { RecordingsService } from 'src/app/services/recordings.service';
 import { SettingsService } from 'src/app/services/settings.service';
-import { buildRecordingHistory, projectRecordingHistory, historyConsistency } from 'src/app/features/recording-groups/recording-history.model';
+import { buildRecordingHistory, projectRecordingHistory, historyConsistency, filterRecordingDirection, HistoryFilter } from 'src/app/features/recording-groups/recording-history.model';
 import { sortRecordings } from 'src/app/utils/recordings-sorter';
 import { untilTrue } from 'src/app/utils/waitForAsync';
 import { AndroidSAF } from 'src/plugins/androidsaf';
@@ -66,7 +66,7 @@ export class MainPage implements AfterViewInit {
   protected searchValue = signal('');
   protected isZh = /^zh\b/i.test(navigator.language);
   protected showAllRecordings = signal(false);
-  protected directionFilter = signal<'all' | 'in' | 'out'>('all');
+  protected directionFilter = signal<HistoryFilter>('all');
   private playRequestId = 0;
   actionButtons: ActionButton[] = [
     {
@@ -83,9 +83,7 @@ export class MainPage implements AfterViewInit {
   // Playback, multiselection and intent handling must keep using the full list.
   private sortedItems = computed<Recording[]>(() => {
     const sortedItems = buildRecordingHistory(
-      this.recordingsService.recordings().filter(item =>
-        this.directionFilter() === 'all' || item.direction === this.directionFilter()
-      ),
+      filterRecordingDirection(this.recordingsService.recordings(), this.directionFilter()),
       this.searchValue(),
       this.settings.recordingsSortMode,
     );
@@ -114,7 +112,7 @@ export class MainPage implements AfterViewInit {
   protected visibleCount = computed(() => this.items().length);
   protected groupCount = computed(() => this.groups().size);
   protected historyIntegrity = computed(() => historyConsistency(this.sortedItems(), this.groups()));
-  protected setDirectionFilter(value: 'all' | 'in' | 'out'): void {
+  protected setDirectionFilter(value: HistoryFilter): void {
     if (this.directionFilter() === value) return;
     this.resetListInteraction();
     this.directionFilter.set(value);
