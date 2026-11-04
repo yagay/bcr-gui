@@ -78,3 +78,23 @@
   position: absolute; width: 1px; height: 1px;
   overflow: hidden; visibility: hidden; pointer-events: none;
 }
+
+.history-counts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px 12px;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--ion-color-step-150);
+  color: var(--ion-color-step-600);
+  font-size: 11px;
+}
+.history-view-button {
+  margin-inline-start: auto;
+  padding: 5px 9px;
+  border: 1px solid var(--ion-color-step-250);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ion-color-primary);
+  font-size: 12px;
+}
