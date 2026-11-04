@@ -1,4 +1,4 @@
-<app-header [title]="version.appName" [actionButtons]="actionButtons" [showCustomContent]="isMultiselect()">
+<app-header [title]="version.appName" [showCustomContent]="isMultiselect()">
   <ion-buttons slot="start">
     <ion-button (click)="clearSelection()" aria-label="Cancel selection">
       <ion-icon name="close" slot="icon-only" />
@@ -15,18 +15,11 @@
   </ion-buttons>
 </app-header>
 
-@if (isSearch()) {
-  <ion-toolbar>
-    <ion-searchbar #searchBar show-clear-button="focus" [debounce]="500"
-      [(ngModel)]="searchValue" [placeholder]="'LBL_SEARCH' | translatePipe"
-      (ionClear)="clearFilter()" />
-  </ion-toolbar>
-}
-
-<app-history-controls [zh]="isZh" [direction]="directionFilter()" [total]="indexedCount()"
+<app-history-controls [zh]="isZh" [search]="searchValue()" [direction]="directionFilter()" [total]="indexedCount()"
   [contactCount]="groupCount()" [matches]="historyIntegrity().sourceCount"
   [hasFilter]="!!searchValue() || directionFilter() !== 'all'"
   [allRecordings]="showAllRecordings()" [refreshing]="isRefreshing()" [sortMode]="sortMode()"
+  (searchChange)="setSearch($event)" (resetAll)="resetFilters()"
   (sortChange)="setSortMode($event)" (directionChange)="setDirectionFilter($event)" (toggleView)="toggleViewMode()"
   (refresh)="refreshFromToolbar()" />
 

@@ -1,5 +1,5 @@
 import { AudioPlayerComponent, SkipDirection } from 'src/app/components/audio-player/audio-player.component';
-import { ActionButton, HeaderComponent } from 'src/app/components/header/header.component';
+import { HeaderComponent } from 'src/app/components/header/header.component';
 import { VirtualScrollbarComponent } from 'src/app/components/virtual-scrollbar/virtual-scrollbar.component';
 import { RecordingGroupsService } from 'src/app/features/recording-groups/recording-groups.service';
 import { HistoryRecordingRowComponent } from 'src/app/features/recording-groups/history-recording-row.component';
@@ -10,7 +10,6 @@ import { Recording } from 'src/app/models/recording';
 import { DatetimePipe } from 'src/app/pipes/datetime.pipe';
 import { FilesizePipe } from 'src/app/pipes/filesize.pipe';
 import { ToHmsPipe } from 'src/app/pipes/to-hms.pipe';
-import { TranslatePipe } from 'src/app/pipes/translate.pipe';
 import { ContactsService } from 'src/app/services/contacts.service';
 import { I18nService } from 'src/app/services/i18n.service';
 import { MessageBoxService } from 'src/app/services/message-box.service';
@@ -25,10 +24,9 @@ import { ErrorCode } from 'src/plugins/bcrgui';
 import { CdkVirtualScrollViewport, ScrollingModule } from '@angular/cdk/scrolling';
 import { DatePipe } from '@angular/common';
 import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, inject, signal, viewChild } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Clipboard } from '@capacitor/clipboard';
-import { ActionSheetController, IonSearchbar, RefresherCustomEvent } from '@ionic/angular';
+import { ActionSheetController, RefresherCustomEvent } from '@ionic/angular';
 import version from '../../version';
 
 @Component({
@@ -41,7 +39,6 @@ import version from '../../version';
     AudioPlayerComponent,
     DatetimePipe,
     FilesizePipe,
-    FormsModule,
     HeaderComponent,
     IonicBundleModule,
     HistoryRecordingRowComponent,
@@ -49,7 +46,6 @@ import version from '../../version';
     HistoryDetailsComponent,
     ScrollingModule,
     ToHmsPipe,
-    TranslatePipe,
     VirtualScrollbarComponent,
   ],
   providers: [
@@ -63,19 +59,12 @@ export class MainPage implements AfterViewInit {
 
   protected version = version;
   protected isMultiselect = signal(false);
-  protected isSearch = signal(false);
   protected searchValue = signal('');
   protected isZh = /^zh\b/i.test(navigator.language);
   protected showAllRecordings = signal(false);
   protected directionFilter = signal<HistoryFilter>('all');
   private playRequestId = 0;
-  actionButtons: ActionButton[] = [
-    {
-      icon: () => this.searchValue() ? 'search-circle' : 'search-circle-outline',
-      visible: () => !this.isMultiselect(),
-      onClick: () => this.toggleSearchBar(),
-    },
-  ];
+  // Search and filters are controlled by the same HistoryControls toolbar.
   selectedItem = signal<Recording | undefined>(undefined);
   protected recordingGroups = inject(RecordingGroupsService);
   protected expandedGroupKey = this.recordingGroups.expandedGroupKey;
@@ -284,7 +273,6 @@ export class MainPage implements AfterViewInit {
 
   private player = viewChild(AudioPlayerComponent);
   private scrollViewport = viewChild(CdkVirtualScrollViewport);
-  private searchBar = viewChild(IonSearchbar);
 
   constructor(
     private asc: ActionSheetController,
@@ -418,20 +406,24 @@ export class MainPage implements AfterViewInit {
     return this.sortedItems().filter(r => r.selected);
   }
 
-  /**
-   * Show/hide the searchbar and set focus to search field
-   */
-  toggleSearchBar() {
-    this.isSearch.update(v => !v);
-    if (this.isSearch()) {
-      setTimeout(() => this.searchBar?.()?.setFocus(), 50);
-    }
+  protected setSearch(value: string): void {
+    if (this.searchValue() === value) return;
+    this.resetListInteraction();
+    this.searchValue.set(value);
+    this.scrollViewport()?.scrollToIndex(0);
+    this.remeasureViewport();
   }
 
-  clearFilter() {
+  protected resetFilters(): void {
+    this.resetListInteraction();
     this.searchValue.set('');
-    this.isSearch.set(false);
-    // this.updateFilter();
+    this.directionFilter.set('all');
+    this.scrollViewport()?.scrollToIndex(0);
+    this.remeasureViewport();
+  }
+
+  clearFilter(): void {
+    this.searchValue.set('');
   }
 
   /**

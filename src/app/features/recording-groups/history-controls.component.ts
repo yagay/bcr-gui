@@ -9,6 +9,16 @@ export type HistoryDirection = 'all' | 'in' | 'out' | 'voip';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
+    <div class="search-row">
+      <input type="search" [value]="search()" (input)="searchChange.emit($any($event.target).value)"
+        [placeholder]="zh() ? '搜索联系人或号码' : 'Search contacts or numbers'"
+        [attr.aria-label]="zh() ? '搜索录音' : 'Search recordings'" />
+      @if (search() || direction() !== 'all') {
+        <button type="button" (click)="resetAll.emit()" [attr.aria-label]="zh() ? '重置筛选' : 'Reset filters'">
+          {{ zh() ? '重置' : 'Reset' }}
+        </button>
+      }
+    </div>
     <nav class="direction-row" [attr.aria-label]="zh() ? '通话类型' : 'Call direction'">
       @for (option of directions; track option.key) {
         <button type="button" [class.active]="direction() === option.key"
@@ -43,6 +53,10 @@ export type HistoryDirection = 'all' | 'in' | 'out' | 'voip';
   `,
   styles: [`
     :host { display:block; background:var(--ion-background-color); }
+    .search-row {display:flex;align-items:center;gap:8px;padding:9px 14px 0;}
+    .search-row input {min-width:0;flex:1;min-height:38px;border:1px solid var(--ion-color-step-200);
+      border-radius:9px;padding:0 12px;color:var(--ion-text-color);background:var(--ion-color-step-50);font-size:14px;}
+    .search-row button {border:0;background:none;color:var(--ion-color-primary);padding:9px;white-space:nowrap;}
     .direction-row {display:flex;gap:8px;padding:8px 14px;border-bottom:1px solid var(--ion-color-step-150);}
     .direction-row button {flex:1;min-width:0;border:0;border-radius:20px;padding:8px 6px;font-size:13px;
       background:var(--ion-color-step-100);color:var(--ion-text-color);}
@@ -61,6 +75,9 @@ export type HistoryDirection = 'all' | 'in' | 'out' | 'voip';
 })
 export class HistoryControlsComponent {
   readonly zh = input(false);
+  readonly search = input('');
+  readonly searchChange = output<string>();
+  readonly resetAll = output<void>();
   readonly direction = input<HistoryDirection>('all');
   readonly total = input(0);
   readonly contactCount = input(0);
