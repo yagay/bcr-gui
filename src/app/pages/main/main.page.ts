@@ -72,6 +72,9 @@ export class MainPage implements AfterViewInit {
   // Contact-group summaries remain available via the explicit toggle.
   protected showEachRecording = signal(true);
   protected detailGroupKey = signal<string | undefined>(undefined);
+  // The details selection must identify the tapped recording, not just its
+  // contact. The contact group is used only in grouped view.
+  protected detailRecording = signal<Recording | undefined>(undefined);
   protected playerExpanded = signal(false);
   // Latest tap wins: stale readiness polls must never play the old recording.
   private playbackRequestId = 0;
@@ -160,12 +163,16 @@ export class MainPage implements AfterViewInit {
   protected filteredRecordingCount = computed(() => this.sortedItems().length);
   protected groupCount = computed(() => this.groups().size);
   protected toggleRecordView() {
+    this.closeDetails();
     this.clearSelection();
     this.showEachRecording.update(value => !value);
     this.scrollViewport()?.scrollToIndex(0);
     this.refreshViewportLayout();
   }
   protected detailRecords = computed(() => {
+    const selected = this.detailRecording();
+    if (!selected) return [];
+    if (this.showEachRecording()) return [selected];
     const key = this.detailGroupKey();
     return key ? (this.groups().get(key) ?? []) : [];
   });
@@ -338,7 +345,7 @@ export class MainPage implements AfterViewInit {
 
   protected setCallFilter(filter: CallFilter) {
     if (this.callFilter() === filter) return;
-    this.detailGroupKey.set(undefined);
+    this.closeDetails();
     this.clearSelection();
     this.callFilter.set(filter);
     this.scrollViewport()?.scrollToIndex(0);
@@ -397,19 +404,29 @@ export class MainPage implements AfterViewInit {
       { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(item.date));
   }
 
+  /** Single-record view acts on one recording; grouped view acts on a contact. */
+  private recordsForAction(item: Recording): Recording[] {
+    return this.showEachRecording()
+      ? [item]
+      : (this.groups().get(this.getGroupKey(item)) ?? [item]);
+  }
+
   protected openDetails(item: Recording) {
     if (this.isMultiselect()) {
-      const group = this.groups().get(this.getGroupKey(item)) ?? [item];
-      const next = !group.every(record => record.selected);
-      group.forEach(record => record.selected = next);
+      const targets = this.recordsForAction(item);
+      const next = !targets.every(record => record.selected);
+      targets.forEach(record => record.selected = next);
+      if (!this.getSelectedItems().length) this.isMultiselect.set(false);
       this.cdr.markForCheck();
       return;
     }
+    this.detailRecording.set(item);
     this.detailGroupKey.set(this.getGroupKey(item));
   }
 
   protected closeDetails() {
     this.detailGroupKey.set(undefined);
+    this.detailRecording.set(undefined);
   }
 
   protected async playFromDetails(item: Recording, forcePlay = false, keepDetails = false) {
@@ -752,14 +769,12 @@ Duration: ${this.toHms.transform(item.duration)}
    * Start multiselection and select the given item
    */
   protected startMultiselection(item?: Recording) {
-    if (!this.isMultiselect()) {
-      this.clearSelection();
-      this.isMultiselect.set(true);
-      if (item) {
-        const group = this.groups().get(this.getGroupKey(item)) ?? [item];
-        group.forEach(record => record.selected = true);
-      }
-    }
+    if (this.isMultiselect()) return;
+    this.closeDetails();
+    this.clearSelection();
+    this.isMultiselect.set(true);
+    if (item) this.recordsForAction(item).forEach(record => record.selected = true);
+    this.cdr.markForCheck();
   }
 
   /**
