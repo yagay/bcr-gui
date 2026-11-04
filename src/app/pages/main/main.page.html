@@ -22,11 +22,26 @@
   </ion-toolbar>
 }
 
+<div class="history-filters" role="group" [attr.aria-label]="isZh ? '通话类型' : 'Call direction'">
+  <button type="button" [class.active]="directionFilter() === 'all'"
+    [attr.aria-pressed]="directionFilter() === 'all'" (click)="setDirectionFilter('all')">
+    {{ isZh ? '全部' : 'All' }}
+  </button>
+  <button type="button" [class.active]="directionFilter() === 'in'"
+    [attr.aria-pressed]="directionFilter() === 'in'" (click)="setDirectionFilter('in')">
+    {{ isZh ? '来电' : 'Incoming' }}
+  </button>
+  <button type="button" [class.active]="directionFilter() === 'out'"
+    [attr.aria-pressed]="directionFilter() === 'out'" (click)="setDirectionFilter('out')">
+    {{ isZh ? '去电' : 'Outgoing' }}
+  </button>
+</div>
+
 <div class="history-toolbar">
   <div class="history-summary">
     <span>{{ isZh ? '录音' : 'Recordings' }} {{ indexedCount() }}</span>
     <span>{{ isZh ? '联系人' : 'Contacts' }} {{ groupCount() }}</span>
-    @if (searchValue()) {
+    @if (searchValue() || directionFilter() !== 'all') {
       <span>{{ isZh ? '匹配' : 'Matches' }} {{ historyIntegrity().sourceCount }}</span>
     }
   </div>
