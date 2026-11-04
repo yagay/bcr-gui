@@ -36,3 +36,31 @@ ion-button {
   min-width: 2em;
   max-width: 5em;
 }
+
+.diagnostic-preview {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 0;
+}
+.diagnostic-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+}
+.diagnostic-log {
+  display: block;
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  padding: 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  background: var(--ion-color-step-50);
+  color: var(--ion-text-color);
+  border-radius: 8px;
+}
