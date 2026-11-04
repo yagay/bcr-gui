@@ -54,43 +54,67 @@
       <cdk-virtual-scroll-viewport #vsv class="virtual-scroll-viewport ion-content-scroll-host"
         [itemSize]="itemHeight" (scrolledIndexChange)="onScroll($event)">
 
-        <div class="call-row" *cdkVirtualFor="let item of items(); let index = index; trackBy: trackByUri"
-          [class.selected]="item.selected"
-          [class.batch-mode]="isMultiselect()"
-          (click)="openDetails(item)"
-          longPress (longPress)="startMultiselection(item)"
-          role="button" tabindex="0"
-          (keydown.enter)="openDetails(item)"
-          (keydown.space)="openDetails(item); $event.preventDefault()">
-          <div class="avatar"><ion-icon name="person-outline" /></div>
-          <div class="call-summary">
-            <div class="row-top">
-              <span class="caller-name">{{ callerLabel(item) }}</span>
-              @if (getGroupCount(item) > 1) {
-                <span class="group-count">{{ getGroupCount(item) }}</span>
+
+        <!-- Every CDK item is exactly 86px, including the expanded seek item. -->
+        <div class="virtual-row"
+          *cdkVirtualFor="let row of virtualItems(); trackBy: trackByVirtualRow">
+          @if (row.kind === 'recording') {
+            <div class="call-row"
+              [class.selected]="row.recording.selected"
+              [class.batch-mode]="isMultiselect()"
+              (click)="openDetails(row.recording)"
+              longPress (longPress)="startMultiselection(row.recording)"
+              role="button" tabindex="0"
+              (keydown.enter)="openDetails(row.recording)"
+              (keydown.space)="openDetails(row.recording); $event.preventDefault()">
+              <div class="avatar"><ion-icon name="person-outline" /></div>
+              <div class="call-summary">
+                <div class="row-top">
+                  <span class="caller-name">{{ callerLabel(row.recording) }}</span>
+                  @if (getGroupCount(row.recording) > 1) {
+                    <span class="group-count">{{ getGroupCount(row.recording) }}</span>
+                  }
+                </div>
+                <div class="row-meta">
+                  <app-call-icon class="call-direction-icon"
+                    [direction]="row.recording.direction ?? ''" />
+                  @if (sourceLabel(row.recording)) {
+                    <span class="source-label">{{ sourceLabel(row.recording) }}</span>
+                  }
+                  <span class="call-time">{{ row.recording.date | datetime }}</span>
+                  @if (row.recording.duration) {
+                    <span>· {{ row.recording.duration | toHms }}</span>
+                  }
+                </div>
+                @if (isNewDay(row.recording)) {
+                  <div class="day-label">{{ dayLabel(row.recording) }}</div>
+                }
+              </div>
+              @if (!isMultiselect()) {
+                <button type="button" class="row-play"
+                  (click)="playFromDetails(row.recording); $event.stopPropagation()"
+                  [attr.aria-label]="callHistoryLabels.play">
+                  <ion-icon [name]="selectedItem() === row.recording && player()?.isPlaying()
+                    ? 'pause-circle-outline' : 'play-circle-outline'" />
+                </button>
+              } @else {
+                <ion-icon class="selection-icon"
+                  [name]="row.recording.selected ? 'checkbox' : 'square-outline'" />
               }
+              <ion-icon name="chevron-forward-outline" class="row-chevron" />
             </div>
-            <div class="row-meta">
-              <app-call-icon class="call-direction-icon" [direction]="item.direction ?? ''" />
-              @if (sourceLabel(item)) {
-                <span class="source-label">{{ sourceLabel(item) }}</span>
-              }
-              <span class="call-time">{{ item.date | datetime }}</span>
-              @if (item.duration) { <span>· {{ item.duration | toHms }}</span> }
-            </div>
-            @if (isNewDay(item, index)) {
-              <div class="day-label">{{ dayLabel(item) }}</div>
-            }
-          </div>
-          @if (!isMultiselect()) {
-            <button type="button" class="row-play" (click)="playFromDetails(item); $event.stopPropagation()"
-              [attr.aria-label]="callHistoryLabels.play">
-              <ion-icon name="play-circle-outline" />
-            </button>
           } @else {
-            <ion-icon class="selection-icon" [name]="item.selected ? 'checkbox' : 'square-outline'" />
+            <app-call-inline-player
+              [currentPosition]="player()?.currentPosition() ?? 0"
+              [duration]="player()?.totalDuration() ?? 0"
+              [ready]="player()?.isReady() ?? false"
+              [playing]="player()?.isPlaying() ?? false"
+              [speed]="settings.playbackSpeed"
+              (playPause)="togglePlayback()"
+              (seek)="seekInline($event)"
+              (changeSpeed)="changeInlineSpeed()"
+              (close)="closePlayer()" />
           }
-          <ion-icon name="chevron-forward-outline" class="row-chevron" />
         </div>
       </cdk-virtual-scroll-viewport>
       <app-virtual-scrollbar class="virtual-scrollbar" [virtualScrollViewport]="vsv" />
@@ -104,41 +128,10 @@
     </ion-list>
 
     @if (selectedItem() && !isMultiselect()) {
-      <div class="mini-player" role="group" aria-label="Recording player">
-        <button type="button" class="mini-player-title"
-          (click)="playerExpanded.set(!playerExpanded())">
-          <ion-icon name="musical-notes-outline" />
-          <span class="mini-player-text">
-            <strong>{{ selectedItem()?.opName || callHistoryLabels.audio }}</strong>
-            <small>{{ selectedItem()!.date | datetime }}</small>
-          </span>
-          <ion-icon [name]="playerExpanded() ? 'chevron-down' : 'chevron-up'" />
-        </button>
-        <button type="button" class="mini-action" (click)="togglePlayback()"
-          [disabled]="!player()?.isReady()" [attr.aria-label]="callHistoryLabels.play">
-          <ion-icon [name]="player()?.isPlaying() ? 'pause' : 'play'" />
-        </button>
-        <button type="button" class="mini-action" (click)="closePlayer()" aria-label="Close player">
-          <ion-icon name="close" />
-        </button>
-        <button type="button" class="mini-progress-button"
-          [attr.aria-label]="callHistoryLabels.play"
-          (click)="playerExpanded.set(true)">
-          <span class="mini-progress-track">
-            <span class="mini-progress-fill"
-              [style.width.%]="(player()?.totalDuration() || 0) > 0
-                ? 100 * (player()?.currentPosition() || 0) / (player()?.totalDuration() || 1)
-                : 0">
-            </span>
-          </span>
-          <span class="mini-progress-times">
-            {{ (player()?.currentPosition() || 0) | toHms }} / {{ (player()?.totalDuration() || 0) | toHms }}
-          </span>
-        </button>
-      </div>
-      <div class="player-panel" [class.collapsed]="!playerExpanded()">
+      <!-- Audio engine stays mounted outside the recycled CDK items.
+           Scrolling away from an active call must not stop its audio. -->
+      <div class="audio-engine" aria-hidden="true">
         <app-audio-player #audioPlayer
-          class="player"
           [recording]="selectedItem()!"
           (onSkip)="onSkip($event)" />
       </div>
