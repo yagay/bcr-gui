@@ -95,6 +95,7 @@ export class MainPage implements AfterViewInit {
   protected groups = computed(() => this.recordingGroups.buildGroups(
     this.sortedItems(),
     this.settings.defaultCountryPrefix,
+    this.settings.recordingsSortMode,
   ));
 
   // filtered and grouped items collection

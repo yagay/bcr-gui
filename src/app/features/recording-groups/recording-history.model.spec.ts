@@ -109,3 +109,29 @@ describe('type filters and VoIP visibility', () => {
     expect(filterRecordingDirection([inCall, voip, standaloneWav], 'voip')).toEqual([voip]);
   });
 });
+
+describe('consistent grouped sorting', () => {
+  const service = new RecordingGroupsService();
+  const rec = (uri: string, date: number, duration: number, number: string): Recording => {
+    const r = new Recording();
+    r.audioUri = uri; r.date = date; r.duration = duration;
+    r.opName = number; r.opNumber = number;
+    return r;
+  };
+  const older = rec('old', 100, 120, '+447700123456');
+  const recent = rec('recent', 200, 30, '+447700123456');
+  const unrelated = rec('other', 150, 60, '+447700123457');
+  afterEach(() => service.expandedGroupKey.set(undefined));
+  it('respects ascending date both for contact header and expanded items', () => {
+    const groups = service.buildGroups([recent, unrelated, older], '', SortModeEnum.Date_ASC);
+    service.expand(older, '');
+    const rows = projectRecordingHistory(groups, service, SortModeEnum.Date_ASC, '');
+    expect(rows).toEqual([older, recent, unrelated]);
+  });
+  it('respects descending duration within a contact', () => {
+    const groups = service.buildGroups([recent, older], '', SortModeEnum.Duration_DESC);
+    service.expand(older, '');
+    const rows = projectRecordingHistory(groups, service, SortModeEnum.Duration_DESC, '');
+    expect(rows).toEqual([older, recent]);
+  });
+});

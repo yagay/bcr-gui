@@ -13,7 +13,7 @@ import { Injectable, signal } from '@angular/core';
 export class RecordingGroupsService {
   readonly expandedGroupKey = signal<string | undefined>(undefined);
 
-  buildGroups(recordings: Recording[], defaultCountryPrefix: string): Map<string, Recording[]> {
+  buildGroups(recordings: Recording[], defaultCountryPrefix: string, sortMode: SortModeEnum = SortModeEnum.Date_DESC): Map<string, Recording[]> {
     const groups = new Map<string, Recording[]>();
 
     for (const recording of recordings) {
@@ -23,7 +23,12 @@ export class RecordingGroupsService {
       groups.set(key, group);
     }
 
-    groups.forEach(group => group.sort((a, b) => b.date - a.date));
+    // A collapsed header is always the first item according to the active
+    // sort mode, and expanded children follow the same ordering.
+    groups.forEach(group => {
+      const sorted = sortRecordings(group, sortMode);
+      group.splice(0, group.length, ...sorted);
+    });
     return groups;
   }
 
