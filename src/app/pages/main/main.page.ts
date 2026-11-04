@@ -1,8 +1,6 @@
 import { AudioPlayerComponent, SkipDirection } from 'src/app/components/audio-player/audio-player.component';
-import { CallIconComponent } from 'src/app/components/call-icon/call-icon.component';
 import { ActionButton, HeaderComponent } from 'src/app/components/header/header.component';
 import { VirtualScrollbarComponent } from 'src/app/components/virtual-scrollbar/virtual-scrollbar.component';
-import { LongPressDirective } from 'src/app/directives/long-press.directive';
 import { RecordingGroupsService } from 'src/app/features/recording-groups/recording-groups.service';
 import { HistoryRecordingRowComponent } from 'src/app/features/recording-groups/history-recording-row.component';
 import { IonicBundleModule } from 'src/app/IonicBundle.module';
@@ -38,13 +36,11 @@ import version from '../../version';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     AudioPlayerComponent,
-    CallIconComponent,
     DatetimePipe,
     FilesizePipe,
     FormsModule,
     HeaderComponent,
     IonicBundleModule,
-    LongPressDirective,
     HistoryRecordingRowComponent,
     ScrollingModule,
     ToHmsPipe,
