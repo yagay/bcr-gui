@@ -4,7 +4,8 @@ import { ActionButton, HeaderComponent } from 'src/app/components/header/header.
 import { VirtualScrollbarComponent } from 'src/app/components/virtual-scrollbar/virtual-scrollbar.component';
 import { LongPressDirective } from 'src/app/directives/long-press.directive';
 import { RecordingGroupsService } from 'src/app/features/recording-groups/recording-groups.service';
-import { CallFilter, callSourceLabel, filterCallRecordings, isVoipRecording, localDayKey } from 'src/app/features/call-history/call-history';
+import { CallFilter, CallHistoryRow, buildCallHistoryRows, callSourceLabel, filterCallRecordings, isVoipRecording, localDayKey } from 'src/app/features/call-history/call-history';
+import { CallInlinePlayerComponent } from 'src/app/features/call-history/call-inline-player.component';
 import { IonicBundleModule } from 'src/app/IonicBundle.module';
 import { Recording } from 'src/app/models/recording';
 import { DatetimePipe } from 'src/app/pipes/datetime.pipe';
@@ -39,6 +40,7 @@ import version from '../../version';
   imports: [
     AudioPlayerComponent,
     CallIconComponent,
+    CallInlinePlayerComponent,
     DatetimePipe,
     FilesizePipe,
     FormsModule,
@@ -137,6 +139,12 @@ export class MainPage implements AfterViewInit {
     Array.from(this.groups().values(), group => group[0]),
     this.settings.recordingsSortMode,
   ));
+  // An extra fixed-height virtual item appears immediately below the call
+  // whose playback button was pressed. No row changes its height on expansion.
+  protected virtualItems = computed<CallHistoryRow[]>(() => buildCallHistoryRows(
+    this.items(), this.selectedItem(), this.playerExpanded(),
+    item => this.getGroupKey(item),
+  ));
   protected detailRecords = computed(() => {
     const key = this.detailGroupKey();
     return key ? (this.groups().get(key) ?? []) : [];
@@ -216,9 +224,9 @@ export class MainPage implements AfterViewInit {
       // select & play it (need to wait for player initialization)
       playItem.selected = true;
       this.selectedItem.set(playItem);
-      // The full seek bar must be visible when playback is started by an intent.
+      // Show inline progress under the caller's summary row for VIEW intents.
       this.playerExpanded.set(true);
-      this.cdr.detectChanges(); // ensure player and seek controls are present
+      this.cdr.detectChanges(); // ensure persistent player and inline controls exist
       await untilTrue(() => this.player()?.recording() === playItem && this.player()!.isReady());
       await this.player()?.play();
 
@@ -310,10 +318,12 @@ export class MainPage implements AfterViewInit {
     return item.opName || item.opNumber;
   }
 
-  protected isNewDay(item: Recording, index: number): boolean {
+  protected isNewDay(item: Recording): boolean {
     if (this.settings.recordingsSortMode !== SortModeEnum.Date_ASC &&
         this.settings.recordingsSortMode !== SortModeEnum.Date_DESC) return false;
-    return index === 0 || localDayKey(item.date) !== localDayKey(this.items()[index - 1]?.date ?? Number.NaN);
+    const index = this.items().indexOf(item);
+    return index === 0 || (index > 0 &&
+      localDayKey(item.date) !== localDayKey(this.items()[index - 1].date));
   }
 
   protected dayLabel(item: Recording): string {
@@ -344,9 +354,10 @@ export class MainPage implements AfterViewInit {
 
   protected async playFromDetails(item: Recording) {
     this.closeDetails();
-    if (this.selectedItem() !== item) await this.onItemClick(item);
-    // Opening the full player is part of the Play action; do not require an
-    // additional tap on the miniature bar to discover the seek controls.
+    const sameRecording = this.selectedItem() === item;
+    if (!sameRecording) await this.onItemClick(item);
+    // The inline seek controller is placed directly AFTER the clicked call
+    // in the fixed-size CDK virtual list, not at the bottom of the screen.
     this.playerExpanded.set(true);
     this.cdr.detectChanges();
     try {
@@ -354,16 +365,23 @@ export class MainPage implements AfterViewInit {
         () => this.player()?.recording() === item && this.player()!.isReady(),
         100, 8000,
       );
-      await this.player()?.play();
+      if (sameRecording) await this.player()?.togglePlayPause();
+      else await this.player()?.play();
     } catch (error) {
       this.mbs.showError({ error });
     }
   }
 
   protected async togglePlayback() {
-    // Keep the actual progress/seek panel visible for direct playback.
-    this.playerExpanded.set(true);
     await this.player()?.togglePlayPause();
+  }
+
+  protected async seekInline(position: number) {
+    await this.player()?.seekTo(position);
+  }
+
+  protected async changeInlineSpeed() {
+    await this.player()?.toggleSpeed();
   }
 
   protected closePlayer() {
@@ -683,8 +701,8 @@ Duration: ${this.toHms.transform(item.duration)}
     }
   }
 
-  protected trackByUri(idx: number, item: Recording) {
-    return item.audioUri;
+  protected trackByVirtualRow(_index: number, item: CallHistoryRow) {
+    return item.key;
   }
 
 }

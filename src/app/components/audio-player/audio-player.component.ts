@@ -235,7 +235,7 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   /**
    * Toggle player speed
    */
-  protected async toggleSpeed() {
+  public async toggleSpeed() {
     switch (this.settings.playbackSpeed) {
       case 1:
         this.settings.playbackSpeed = 1.5;
@@ -255,10 +255,20 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
    * Set position
    */
   protected async setCurrentPosition(position: number) {
-    if (!position || position < 0) {
-      position = 0;
+    return this.seekTo(position);
+  }
+
+  /** Shared seek implementation for the original player and the inline row. */
+  public async seekTo(position: number) {
+    if (!Number.isFinite(position) || !this.ready()) return;
+    const clamped = Math.max(0, Math.min(position, this.duration()));
+    try {
+      await AudioPlayer.setCurrentPosition({ position: clamped * 1000 });
+      this.progress.set(clamped);
+      this.cdr.markForCheck();
+    } catch (error) {
+      this.showError(error, 'seekTo()');
     }
-    AudioPlayer.setCurrentPosition({ position: position * 1000 });
   }
 
   /**

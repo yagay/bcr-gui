@@ -61,3 +61,18 @@ time using the exact signals from the existing `AudioPlayerComponent`:
 no duplicate timer, playback engine or seek implementation is introduced.
 Tapping the compact progress bar expands the full seek controls, and manually
 collapsing the full panel keeps playback and progress updates running.
+
+## Inline progress below the call play button
+
+The standalone and Suite GUI now insert a **second fixed-size CDK virtual row**
+directly after the active caller summary. This holds an Ionic seek slider,
+elapsed/total time, -10/+10 second buttons, pause/resume, speed and close.
+All other summary rows keep their original 86px height, so virtualization is
+not forced to measure dynamic expanded cards. Selecting another call moves the
+inline progress to the new call; tapping the same play button toggles playback.
+
+The real `AudioPlayerComponent` remains **persistently mounted outside the
+virtual viewport** while a recording is selected. The inline row only reflects
+its signals and sends actions to its playback methods, so scrolling a row out
+of view does not destroy or restart the native audio session. No duplicate
+audio engine, timer, or file reads are introduced.
