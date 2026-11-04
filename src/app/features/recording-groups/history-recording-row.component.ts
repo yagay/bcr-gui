@@ -3,6 +3,7 @@ import { Recording } from 'src/app/models/recording';
 import { CallIconComponent } from 'src/app/components/call-icon/call-icon.component';
 import { ToHmsPipe } from 'src/app/pipes/to-hms.pipe';
 import { LongPressDirective } from 'src/app/directives/long-press.directive';
+import { callHistoryDateLabel } from './history-display-rows';
 
 @Component({
   selector: 'app-history-recording-row',
@@ -113,10 +114,8 @@ export class HistoryRecordingRowComponent {
     return name.slice(0, 1).toUpperCase();
   }
   protected formattedDate(): string {
-    const date = this.recording().date;
-    if (!Number.isFinite(date) || date <= 0) return '';
-    return new Intl.DateTimeFormat(this.zh() ? 'zh-CN' : 'en-GB', {
-      year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:this.hour12()
-    }).format(new Date(date));
+    return callHistoryDateLabel(
+      this.recording().date, this.zh() ? 'zh-CN' : 'en-GB', this.hour12(),
+    );
   }
 }

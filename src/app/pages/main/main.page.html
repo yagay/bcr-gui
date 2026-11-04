@@ -37,7 +37,7 @@
       </ion-refresher>
       <cdk-virtual-scroll-viewport #vsv class="virtual-scroll-viewport ion-content-scroll-host"
         [itemSize]="itemHeight" [minBufferPx]="480" [maxBufferPx]="960"
-        (scrolledIndexChange)="onScroll($event)">
+        (scrolledIndexChange)="onScroll($event)" (scroll)="onViewportScroll()">
         <ng-container *cdkVirtualFor="let entry of displayRows(); trackBy: trackByDisplayRow">
           @if (entry.kind === 'recording') {
             <app-history-recording-row

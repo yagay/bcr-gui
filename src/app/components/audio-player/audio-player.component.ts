@@ -212,6 +212,13 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   public retryFailed(): void {
     if (!this.destroying && this.loadFailed()) this.scheduleRecordingSwitch(this.recording());
   }
+  /** Native prepare can stall without rejecting. Expose retry after UI timeout. */
+  public markReadyTimeout(recording: Recording): void {
+    if (this.destroying || this.recording() !== recording || this.isReadyFor(recording)) return;
+    this.ready.set(false);
+    this.loadFailed.set(true);
+    this.cdr.markForCheck();
+  }
   /** Loading the previous file never counts as readiness for a newly selected one. */
   public isReadyFor(recording: Recording) {
     return this.ready() && this.loadedRecording === recording;
