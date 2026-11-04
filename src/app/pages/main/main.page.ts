@@ -129,15 +129,6 @@ export class MainPage implements AfterViewInit {
     this.remeasureViewport();
   }
 
-  protected getSortOptions() {
-    return [
-      { value: SortModeEnum.Date_DESC, label: this.isZh ? '日期：最新优先' : 'Date: newest' },
-      { value: SortModeEnum.Date_ASC, label: this.isZh ? '日期：最早优先' : 'Date: oldest' },
-      { value: SortModeEnum.Duration_DESC, label: this.isZh ? '时长：最长优先' : 'Duration: longest' },
-      { value: SortModeEnum.Duration_ASC, label: this.isZh ? '时长：最短优先' : 'Duration: shortest' },
-    ];
-  }
-
   protected trackByDisplayRow(_index: number, entry: HistoryDisplayRow): string {
     return entry.key;
   }
@@ -181,13 +172,19 @@ export class MainPage implements AfterViewInit {
   }
 
   protected toggleGroup(item: Recording) {
-    if (this.showAllRecordings()) return;
+    if (this.showAllRecordings() || this.isMultiselect()) return;
+    const key = this.getGroupKey(item);
+    if (this.expandedGroupKey() === key && this.selectedItem()
+      && this.getGroupKey(this.selectedItem()!) === key
+      && this.selectedItem() !== item) {
+      this.clearSelection();
+    }
     this.recordingGroups.toggle(item, this.settings.defaultCountryPrefix);
     this.remeasureViewport();
   }
 
   protected isRowPlaying(item: Recording): boolean {
-    return this.selectedItem() === item && this.player()?.isPlaying() === true;
+    return this.selectedItem() === item && this.player()?.playingState() === true;
   }
 
   protected onPlayRow(item: Recording) {
@@ -228,15 +225,36 @@ export class MainPage implements AfterViewInit {
   private selectRecording(item: Recording): void {
     this.recordingsService.recordings().forEach(r => r.selected = false);
     item.selected = true;
+    if (!this.showAllRecordings()) {
+      this.recordingGroups.expand(item, this.settings.defaultCountryPrefix);
+    }
     this.selectedItem.set(item);
     this.isMultiselect.set(false);
     this.selectedCount.set(0);
     this.cdr.markForCheck();
   }
 
+  private groupActionRecords(item: Recording): Recording[] {
+    return this.showAllRecordings()
+      ? [item]
+      : (this.groups().get(this.getGroupKey(item)) ?? [item]);
+  }
+
+  protected rowSelected(item: Recording): boolean {
+    const targets = this.isMultiselect() ? this.groupActionRecords(item) : [item];
+    return targets.every(record => !!record.selected);
+  }
+
+  protected rowPartSelected(item: Recording): boolean {
+    return this.isMultiselect() && this.groupActionRecords(item).some(record => !!record.selected)
+      && !this.rowSelected(item);
+  }
+
   protected onRowClick(item: Recording) {
     if (this.isMultiselect()) {
-      item.selected = !item.selected;
+      const targets = this.groupActionRecords(item);
+      const select = !targets.every(record => record.selected);
+      for (const target of targets) target.selected = select;
       this.updateSelectedCount();
       if (!this.selectedCount()) this.isMultiselect.set(false);
       this.cdr.markForCheck();
@@ -656,7 +674,7 @@ Duration: ${this.toHms.transform(item.duration)}
     if (this.isMultiselect()) return;
     this.clearSelection();
     this.isMultiselect.set(true);
-    if (item) item.selected = true;
+    if (item) this.groupActionRecords(item).forEach(record => record.selected = true);
     this.updateSelectedCount();
     this.cdr.markForCheck();
   }

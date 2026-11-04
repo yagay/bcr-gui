@@ -1,7 +1,7 @@
 import { Recording } from 'src/app/models/recording';
 import { SortModeEnum } from 'src/app/utils/recordings-sorter';
 import { RecordingGroupsService } from './recording-groups.service';
-import { buildRecordingHistory, projectRecordingHistory, historyConsistency, filterRecordingDirection } from './recording-history.model';
+import { buildRecordingHistory, projectRecordingHistory, historyConsistency, filterRecordingDirection, buildDisplayRows } from './recording-history.model';
 
 function makeRecording(index: number, number: string): Recording {
   const r = new Recording();
@@ -133,5 +133,21 @@ describe('consistent grouped sorting', () => {
     service.expand(older, '');
     const rows = projectRecordingHistory(groups, service, SortModeEnum.Duration_DESC, '');
     expect(rows).toEqual([older, recent]);
+  });
+});
+
+describe('inline playback view projection', () => {
+  const first = makeRecording(1, '+44000001');
+  const second = makeRecording(2, '+44000002');
+  it('inserts exactly one fixed-size player row after the active recording', () => {
+    const rows = buildDisplayRows([first, second], first.audioUri);
+    expect(rows.map(row => row.key)).toEqual([
+      first.audioUri, 'player:' + first.audioUri, second.audioUri,
+    ]);
+    expect(rows[1].kind).toBe('player');
+  });
+  it('does not add a stale player for an absent or filtered recording', () => {
+    expect(buildDisplayRows([second], first.audioUri)).toHaveSize(1);
+    expect(buildDisplayRows([first, second], undefined)).toHaveSize(2);
   });
 });

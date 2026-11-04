@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { SortModeEnum } from 'src/app/utils/recordings-sorter';
 
 export type HistoryDirection = 'all' | 'in' | 'out' | 'voip';
 
@@ -23,6 +24,12 @@ export type HistoryDirection = 'all' | 'in' | 'out' | 'voip';
         @if (hasFilter()) { <span>{{ zh() ? '匹配' : 'Matches' }} {{ matches() }}</span> }
       </div>
       <div class="controls">
+        <select class="sort-select" [value]="sortMode()" (change)="updateSort($event)"
+          [attr.aria-label]="zh() ? '录音排序' : 'Sort recordings'">
+          @for (option of sortOptions; track option.value) {
+            <option [value]="option.value">{{ zh() ? option.zh : option.en }}</option>
+          }
+        </select>
         <button class="icon-button" type="button" [disabled]="refreshing()"
           (click)="refresh.emit()" [attr.aria-label]="zh() ? '刷新录音' : 'Refresh recordings'">
           <span aria-hidden="true">{{ refreshing() ? '◌' : '↻' }}</span>
@@ -49,6 +56,7 @@ export type HistoryDirection = 'all' | 'in' | 'out' | 'voip';
       border-radius:8px;color:var(--ion-text-color);font-size:12px;padding:0 8px;}
     .controls button.icon-button {min-width:32px;font-size:22px;padding:0;}
     .controls button:disabled {opacity:.4;}
+    .sort-select {max-width:118px;height:32px;border-radius:8px;border:1px solid var(--ion-color-step-250);background:var(--ion-color-step-50);color:var(--ion-text-color);font-size:12px;}
   `]
 })
 export class HistoryControlsComponent {
@@ -60,9 +68,23 @@ export class HistoryControlsComponent {
   readonly hasFilter = input(false);
   readonly allRecordings = input(false);
   readonly refreshing = input(false);
+  readonly sortMode = input<SortModeEnum>(SortModeEnum.Date_DESC);
+  readonly sortChange = output<SortModeEnum>();
   readonly directionChange = output<HistoryDirection>();
   readonly toggleView = output<void>();
   readonly refresh = output<void>();
+  protected readonly sortOptions = [
+    {value:SortModeEnum.Date_DESC,zh:'最新优先',en:'Newest'},
+    {value:SortModeEnum.Date_ASC,zh:'最早优先',en:'Oldest'},
+    {value:SortModeEnum.Duration_DESC,zh:'最长优先',en:'Longest'},
+    {value:SortModeEnum.Duration_ASC,zh:'最短优先',en:'Shortest'},
+  ];
+  protected updateSort(event: Event): void {
+    const selected = Number((event.target as HTMLSelectElement).value);
+    if (this.sortOptions.some(option => option.value === selected)) {
+      this.sortChange.emit(selected as SortModeEnum);
+    }
+  }
   protected readonly directions: {key: HistoryDirection;zh: string;en: string}[] = [
     {key:'all',zh:'全部',en:'All'},
     {key:'in',zh:'来电',en:'Incoming'},

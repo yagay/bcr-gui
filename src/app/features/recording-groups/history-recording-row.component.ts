@@ -31,7 +31,7 @@ import { LongPressDirective } from 'src/app/directives/long-press.directive';
         </div>
       </div>
       @if (multiselect()) {
-        <span class="selection-indicator" [class.checked]="selected()">{{ selected() ? '✓' : '' }}</span>
+        <span class="selection-indicator" [class.checked]="selected()" [class.partial]="partial()">{{ selected() ? '✓' : partial() ? '−' : '' }}</span>
       } @else {
         @if (isHeader() && groupCount() > 1) {
           <button type="button" class="expand" (click)="expandedClicked.emit(); $event.stopPropagation()"
@@ -71,6 +71,7 @@ import { LongPressDirective } from 'src/app/directives/long-press.directive';
     .play {font-size:21px;}
     .selection-indicator {height:22px;width:22px;flex:0 0 22px;border:2px solid var(--ion-color-step-500);
       border-radius:6px;display:grid;place-items:center;font-size:14px;}
+    .selection-indicator.partial {border-color:var(--ion-color-primary);color:var(--ion-color-primary);}
     .selection-indicator.checked {background:var(--ion-color-primary);color:var(--ion-color-primary-contrast);border-color:var(--ion-color-primary);}
   `]
 })
@@ -80,6 +81,7 @@ export class HistoryRecordingRowComponent {
   readonly groupCount = input(1);
   readonly expanded = input(false);
   readonly selected = input(false);
+  readonly partial = input(false);
   readonly playing = input(false);
   readonly multiselect = input(false);
   readonly zh = input(false);

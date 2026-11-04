@@ -5,6 +5,7 @@
     </ion-button>
   </ion-buttons>
   <ion-buttons slot="end">
+    <ion-label>{{ selectedCount() }} {{ isZh ? '条已选' : 'selected' }}</ion-label>
     <ion-button (click)="selectAll()" aria-label="Select all recordings">
       <ion-icon src="/assets/icons/select-all.svg" slot="icon-only" />
     </ion-button>
@@ -45,7 +46,7 @@
               [isHeader]="showAllRecordings() || isGroupHeader(entry.recording)"
               [groupCount]="showAllRecordings() ? 1 : getGroupCount(entry.recording)"
               [expanded]="expandedGroupKey() === getGroupKey(entry.recording)"
-              [selected]="!!entry.recording.selected"
+              [selected]="rowSelected(entry.recording)" [partial]="rowPartSelected(entry.recording)"
               [playing]="isRowPlaying(entry.recording)"
               [multiselect]="isMultiselect()" [zh]="isZh"
               (opened)="onRowClick(entry.recording)" (playClicked)="onPlayRow(entry.recording)"
