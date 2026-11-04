@@ -166,7 +166,8 @@ public class AudioPlayerService extends MediaSessionService {
   @OptIn(markerClass = UnstableApi.class)
   public void load(PluginCall call) {
 
-    if (isLoaded) {
+    // Even a player still in STATE_BUFFERING must be released.
+    if (player != null) {
       unload();
     }
 
@@ -290,14 +291,26 @@ public class AudioPlayerService extends MediaSessionService {
   }
 
   public void unload() {
-    if (isLoaded) {
-      stop();
+    // A rapid switch can arrive before STATE_READY / isLoaded. Always release
+    // any created player and the associated MediaSession and listeners.
+    isPreparing = false;
+    isLoaded = false;
+    stopUpdateTask();
+    if (player != null) {
       player.release();
-      mediaSession.release();
-      releaseProximitySensor();
       player = null;
-      isLoaded = false;
     }
+    if (mediaSession != null) {
+      mediaSession.release();
+      mediaSession = null;
+    }
+    if (wakeLockPlay != null && wakeLockPlay.isHeld()) {
+      wakeLockPlay.release();
+    }
+    wakeLockPlay = null;
+    releaseProximitySensor();
+    stopForeground(false);
+    cancelNotification();
   }
 
   /**
