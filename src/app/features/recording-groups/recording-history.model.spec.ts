@@ -152,3 +152,12 @@ describe('inline playback view projection', () => {
     expect(buildDisplayRows([first, second], undefined)).toHaveSize(2);
   });
 });
+
+describe('VoIP format compatibility', () => {
+  it('keeps explicit BCR VoIP directories across file extensions', () => {
+    const recording = makeRecording(111, '100');
+    recording.sourceFolder = 'VoIP/WhatsApp';
+    recording.audioDisplayName = 'sample.opus';
+    expect(filterRecordingDirection([recording], 'voip')).toEqual([recording]);
+  });
+});

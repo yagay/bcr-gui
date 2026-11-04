@@ -87,3 +87,17 @@ test('local today/yesterday labels respect calendar boundaries', () => {
   assert.doesNotMatch(callHistoryDateLabel(older, 'en-GB', false, now), /Today|Yesterday/);
   assert.equal(callHistoryDateLabel(0, 'en-GB', false, now), '');
 });
+
+test('VoIP detection recognizes BCR folder provenance and supported audio formats', async () => {
+  const { isVoipRecording } = await import('../../src/app/features/recording-groups/history-voip.ts');
+  const make = (folder: string, file: string) =>
+    ({ sourceFolder: folder, audioDisplayName: file } as Recording);
+  assert.equal(isVoipRecording(make('VoIP', 'call.oga')), true);
+  assert.equal(isVoipRecording(make('VoIP/WhatsApp', 'call.opus')), true);
+  assert.equal(isVoipRecording(make('recordings/Telegram', 'call.m4a')), true);
+  assert.equal(isVoipRecording(make('', '20261104_120000_whatsapp.oga')), true);
+  assert.equal(isVoipRecording(make('', '20261104_120000_telegram.mp3')), true);
+  assert.equal(isVoipRecording(make('', '20261104_120000_signal.wav')), true);
+  assert.equal(isVoipRecording(make('', 'call.wav')), false);
+  assert.equal(isVoipRecording(make('', 'not-audio_whatsapp.txt')), false);
+});
