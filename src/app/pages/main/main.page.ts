@@ -18,7 +18,7 @@ import { RecordingsService } from 'src/app/services/recordings.service';
 import { SettingsService } from 'src/app/services/settings.service';
 import { buildRecordingHistory, projectRecordingHistory, historyConsistency, filterRecordingDirection, HistoryFilter } from 'src/app/features/recording-groups/recording-history.model';
 import { SortModeEnum } from 'src/app/utils/recordings-sorter';
-import { buildDisplayRows, HistoryDisplayRow, actionRecords } from 'src/app/features/recording-groups/history-display-rows';
+import { buildDisplayRows, HistoryDisplayRow, actionRecords, selectionState, setGroupSelection, invertRecordingSelection, inlineRowOnScreen } from 'src/app/features/recording-groups/history-display-rows';
 import { untilTrue } from 'src/app/utils/waitForAsync';
 import { AndroidSAF } from 'src/plugins/androidsaf';
 import { ErrorCode } from 'src/plugins/bcrgui';
@@ -68,6 +68,9 @@ export class MainPage implements AfterViewInit, OnDestroy {
   private playRequestId = 0;
   private viewportResizeObserver?: ResizeObserver;
   private resizeFrame = 0;
+  private viewportScrollFrame = 0;
+  private scrollOffsetPx = signal(0);
+  private viewportHeightPx = signal(0);
   // Search and filters are controlled by the same HistoryControls toolbar.
   selectedItem = signal<Recording | undefined>(undefined);
   protected recordingGroups = inject(RecordingGroupsService);
@@ -107,7 +110,8 @@ export class MainPage implements AfterViewInit, OnDestroy {
   ));
   protected displayCount = computed(() => this.displayRows().length);
   protected indexedCount = computed(() => this.recordingsService.recordings().length);
-  protected selectedCount = signal(0);
+  private selectedUris = signal<ReadonlySet<string>>(new Set());
+  protected selectedCount = computed(() => this.sortedItems().filter(item => this.selectedUris().has(item.audioUri)).length);
   protected initializing = signal(true);
   protected scrubbing = signal(false);
   protected scrubPosition = signal(0);
@@ -161,8 +165,13 @@ export class MainPage implements AfterViewInit, OnDestroy {
 
   // When a playing child recording is folded away, keep its controls reachable.
   protected inlinePlayerVisible(): boolean {
-    const item = this.selectedItem();
-    return !!item && this.items().some(row => row.audioUri === item.audioUri);
+    return inlineRowOnScreen(
+      this.displayRows(),
+      this.selectedItem()?.audioUri,
+      this.scrollOffsetPx(),
+      this.viewportHeightPx(),
+      this.itemHeight,
+    );
   }
   protected toggleInline(): void {
     const item = this.selectedItem();
@@ -222,6 +231,7 @@ export class MainPage implements AfterViewInit, OnDestroy {
     if (this.selectedItem() === item && this.player()?.isReadyFor(item)) {
       ++this.playRequestId;
       await this.player()?.togglePlayPause();
+      this.focusRecording(item);
       return;
     }
     const request = ++this.playRequestId;
@@ -229,33 +239,49 @@ export class MainPage implements AfterViewInit, OnDestroy {
     this.selectRecording(item);
     this.cdr.detectChanges();
     if (retry) this.player()?.retryFailed();
+    this.focusRecording(item);
     this.remeasureViewport();
     try {
       await untilTrue(
         () => request !== this.playRequestId ||
-          (this.selectedItem() === item && this.player()?.isReadyFor(item) === true),
+          (this.selectedItem() === item && (this.player()?.isReadyFor(item) === true ||
+            this.player()?.failedState() === true)),
         75, 12000,
       );
-      if (request === this.playRequestId && this.selectedItem() === item) {
+      if (request === this.playRequestId && this.selectedItem() === item &&
+          this.player()?.isReadyFor(item)) {
         await this.player()?.play();
       }
-    } catch (error) {
+    } catch {
       if (request === this.playRequestId && this.selectedItem() === item) {
-        this.mbs.showError({ error });
+        this.player()?.markReadyTimeout(item);
+        this.mbs.showError({ error: new Error('Playback preparation timed out. Tap retry to load this recording again.') });
       }
     }
   }
 
+  /** Navigate the actual CDK source rows, not the collapsed group count. */
+  private focusRecording(item: Recording): void {
+    requestAnimationFrame(() => {
+      if (this.selectedItem()?.audioUri !== item.audioUri) return;
+      const index = this.displayRows().findIndex(row =>
+        row.kind === 'recording' && row.recording.audioUri === item.audioUri);
+      if (index < 0) return;
+      const viewport = this.scrollViewport();
+      viewport?.checkViewportSize();
+      viewport?.scrollToIndex(Math.max(0, index - 1), 'smooth');
+      this.onViewportScroll();
+    });
+  }
+
   private selectRecording(item: Recording): void {
-    this.recordingsService.recordings().forEach(r => r.selected = false);
-    item.selected = true;
+    this.selectedUris.set(new Set());
     if (!this.showAllRecordings()) {
       this.recordingGroups.expand(item, this.settings.defaultCountryPrefix);
     }
     this.selectedItem.set(item);
     this.scrubbing.set(false);
     this.isMultiselect.set(false);
-    this.selectedCount.set(0);
     this.cdr.markForCheck();
   }
 
@@ -269,22 +295,18 @@ export class MainPage implements AfterViewInit, OnDestroy {
   }
 
   protected rowSelected(item: Recording): boolean {
-    const targets = this.isMultiselect() ? this.groupActionRecords(item) : [item];
-    return targets.every(record => !!record.selected);
+    if (!this.isMultiselect()) return this.selectedItem() === item;
+    return selectionState(this.groupActionRecords(item), this.selectedUris()) === 'all';
   }
 
   protected rowPartSelected(item: Recording): boolean {
-    return this.isMultiselect() && this.groupActionRecords(item).some(record => !!record.selected)
-      && !this.rowSelected(item);
+    return this.isMultiselect() &&
+      selectionState(this.groupActionRecords(item), this.selectedUris()) === 'partial';
   }
 
   protected onRowClick(item: Recording) {
     if (this.isMultiselect()) {
-      const targets = this.groupActionRecords(item);
-      const select = !targets.every(record => record.selected);
-      for (const target of targets) target.selected = select;
-      this.updateSelectedCount();
-      if (!this.selectedCount()) this.isMultiselect.set(false);
+      this.selectedUris.update(old => setGroupSelection(old, this.groupActionRecords(item)));
       this.cdr.markForCheck();
       return;
     }
@@ -424,6 +446,7 @@ export class MainPage implements AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     this.viewportResizeObserver?.disconnect();
     if (this.resizeFrame) cancelAnimationFrame(this.resizeFrame);
+    if (this.viewportScrollFrame) cancelAnimationFrame(this.viewportScrollFrame);
   }
 
   private remeasureViewport(): void {
@@ -432,12 +455,21 @@ export class MainPage implements AfterViewInit, OnDestroy {
     if (this.resizeFrame) cancelAnimationFrame(this.resizeFrame);
     this.resizeFrame = requestAnimationFrame(() => {
       this.resizeFrame = 0;
-      this.scrollViewport()?.checkViewportSize();
+      const viewport = this.scrollViewport();
+      viewport?.checkViewportSize();
+      this.viewportHeightPx.set(viewport?.getViewportSize() ?? 0);
+      this.scrollOffsetPx.set(viewport?.measureScrollOffset('top') ?? 0);
     });
   }
 
-  private updateSelectedCount(): void {
-    this.selectedCount.set(this.recordingsService.recordings().filter(r => !!r.selected).length);
+  protected onViewportScroll(): void {
+    if (this.viewportScrollFrame) return;
+    this.viewportScrollFrame = requestAnimationFrame(() => {
+      this.viewportScrollFrame = 0;
+      const viewport = this.scrollViewport();
+      this.viewportHeightPx.set(viewport?.getViewportSize() ?? 0);
+      this.scrollOffsetPx.set(viewport?.measureScrollOffset('top') ?? 0);
+    });
   }
 
   async refreshList(event?: RefresherCustomEvent) {
@@ -452,17 +484,16 @@ export class MainPage implements AfterViewInit, OnDestroy {
 
   clearSelection() {
     ++this.playRequestId;
-    this.recordingsService.recordings().forEach(r => r.selected = false);
+    this.selectedUris.set(new Set());
     this.selectedItem.set(undefined);
     this.scrubbing.set(false);
-    this.selectedCount.set(0);
     this.isMultiselect.set(false);
     this.cdr.markForCheck();
     this.remeasureViewport();
   }
 
   getSelectedItems(): Recording[] {
-    return this.sortedItems().filter(r => r.selected);
+    return this.sortedItems().filter(r => this.selectedUris().has(r.audioUri));
   }
 
   protected setSearch(value: string): void {
@@ -676,11 +707,10 @@ export class MainPage implements AfterViewInit, OnDestroy {
    * Select all items
    */
   async selectAll() {
-    // In collapsed mode this still selects ALL matching source recordings.
+    // Group headers and virtualized children represent the same full source.
     this.clearSelection();
     this.isMultiselect.set(true);
-    this.sortedItems().forEach(i => i.selected = true);
-    this.updateSelectedCount();
+    this.selectedUris.set(new Set(this.sortedItems().map(item => item.audioUri)));
     this.cdr.markForCheck();
   }
 
@@ -729,21 +759,18 @@ Duration: ${this.toHms.transform(item.duration)}
     if (this.isMultiselect()) return;
     this.clearSelection();
     this.isMultiselect.set(true);
-    if (item) this.groupActionRecords(item).forEach(record => record.selected = true);
-    this.updateSelectedCount();
+    this.selectedUris.set(new Set(item ? this.groupActionRecords(item).map(r => r.audioUri) : []));
     this.cdr.markForCheck();
   }
 
   protected invertSelection(): void {
     if (!this.isMultiselect()) return;
-    for (const item of this.sortedItems()) item.selected = !item.selected;
-    this.updateSelectedCount();
+    this.selectedUris.update(old => invertRecordingSelection(old, this.sortedItems()));
     this.cdr.markForCheck();
   }
 
   protected deselectAll(): void {
-    for (const item of this.recordingsService.recordings()) item.selected = false;
-    this.updateSelectedCount();
+    this.selectedUris.set(new Set());
     this.cdr.markForCheck();
   }
 
@@ -752,6 +779,7 @@ Duration: ${this.toHms.transform(item.duration)}
    */
   onScroll(index: number) {
     this.topIndex = index;
+    this.onViewportScroll();
   }
 
   /**
@@ -775,7 +803,6 @@ Duration: ${this.toHms.transform(item.duration)}
     if (selectedItemIndex >= 0) {
       const newSelectedItem = this.sortedItems()[selectedItemIndex + (direction === 'next' ? +1 : -1)];
       if (newSelectedItem) {
-        if (!this.showAllRecordings()) this.recordingGroups.expand(newSelectedItem, this.settings.defaultCountryPrefix);
         void this.selectAndPlay(newSelectedItem);
       }
     }
