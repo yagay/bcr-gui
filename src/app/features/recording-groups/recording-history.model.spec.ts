@@ -63,3 +63,24 @@ describe('original recording history invariants', () => {
     expect(historyConsistency(filtered, groups).complete).toBeTrue();
   });
 });
+
+describe('caller identity stability', () => {
+  const svc = new RecordingGroupsService();
+  const make = (uri: string, number: string, name: string) => {
+    const rec = new Recording();
+    rec.audioUri = uri; rec.opNumber = number; rec.opName = name; rec.date = 1000;
+    return rec;
+  };
+  it('groups one phone even when the contact name changes', () => {
+    const records = [make('a', '+447700900123', 'Old name'), make('b', '+447700900123', 'New name')];
+    expect(svc.buildGroups(records, '').size).toBe(1);
+  });
+  it('does not merge callers just because they share a name', () => {
+    const records = [make('a', '+447700900123', 'Reception'), make('b', '+447700900124', 'Reception')];
+    expect(svc.buildGroups(records, '').size).toBe(2);
+  });
+  it('isolates hidden or private numbers with no stable identifier', () => {
+    const records = [make('a', '', '<unknown>'), make('b', '', '<unknown>')];
+    expect(svc.buildGroups(records, '').size).toBe(2);
+  });
+});

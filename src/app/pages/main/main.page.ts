@@ -21,7 +21,7 @@ import { AndroidSAF } from 'src/plugins/androidsaf';
 import { ErrorCode } from 'src/plugins/bcrgui';
 import { CdkVirtualScrollViewport, ScrollingModule } from '@angular/cdk/scrolling';
 import { DatePipe } from '@angular/common';
-import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, inject, signal, untracked, viewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Clipboard } from '@capacitor/clipboard';
@@ -72,11 +72,6 @@ export class MainPage implements AfterViewInit {
     },
   ];
   selectedItem = signal<Recording | undefined>(undefined);
-  selectedItemIndex = computed<number>(() => {
-    const item = this.selectedItem();
-    return this.items()?.findIndex(i => i === item) ?? -1;
-  });
-
   protected recordingGroups = inject(RecordingGroupsService);
   protected expandedGroupKey = this.recordingGroups.expandedGroupKey;
 
@@ -90,15 +85,6 @@ export class MainPage implements AfterViewInit {
       this.searchValue(),
       this.settings.recordingsSortMode,
     );
-
-    // Preserve the upstream behavior: a selected recording must be cleared when
-    // it is no longer part of the filtered list.
-    untracked(() => {
-      const selected = this.selectedItem();
-      if (selected && !sortedItems.includes(selected)) {
-        this.clearSelection();
-      }
-    });
 
     return sortedItems;
   });
@@ -119,21 +105,30 @@ export class MainPage implements AfterViewInit {
   // The source count is intentionally independent of the expanded/collapsed
   // CDK rows. Grouping must never change the number of indexed recordings.
   protected indexedCount = computed(() => this.recordingsService.recordings().length);
+  protected selectedCount = signal(0);
+  protected isRefreshing = computed(() => this.recordingsService.refreshProgress() !== undefined);
   protected visibleCount = computed(() => this.items().length);
   protected groupCount = computed(() => this.groups().size);
   protected historyIntegrity = computed(() => historyConsistency(this.sortedItems(), this.groups()));
   protected setDirectionFilter(value: 'all' | 'in' | 'out'): void {
     if (this.directionFilter() === value) return;
-    this.clearSelection();
-    this.recordingGroups.expandedGroupKey.set(undefined);
+    this.resetListInteraction();
     this.directionFilter.set(value);
     this.scrollViewport()?.scrollToIndex(0);
     this.remeasureViewport();
   }
 
-  protected toggleViewMode() {
+  private resetListInteraction(): void {
     this.clearSelection();
     this.recordingGroups.expandedGroupKey.set(undefined);
+  }
+
+  protected refreshFromToolbar(): void {
+    void this.refreshList();
+  }
+
+  protected toggleViewMode() {
+    this.resetListInteraction();
     this.showAllRecordings.update(v => !v);
     this.scrollViewport()?.scrollToIndex(0);
     this.remeasureViewport();
@@ -189,13 +184,15 @@ export class MainPage implements AfterViewInit {
     item.selected = true;
     this.selectedItem.set(item);
     this.isMultiselect.set(false);
+    this.selectedCount.set(0);
     this.cdr.markForCheck();
   }
 
   protected onRowClick(item: Recording) {
     if (this.isMultiselect()) {
       item.selected = !item.selected;
-      if (!this.getSelectedItems().length) this.isMultiselect.set(false);
+      this.updateSelectedCount();
+      if (!this.selectedCount()) this.isMultiselect.set(false);
       this.cdr.markForCheck();
       return;
     }
@@ -267,7 +264,8 @@ export class MainPage implements AfterViewInit {
     await untilTrue(() => this.recordingsService.refreshProgress() === undefined);
 
     this.clearFilter();
-    this.isMultiselect.set(false);
+    this.directionFilter.set('all');
+    this.clearSelection();
 
     // Find the requested file in the full list and expand its contact first. An
     // older recording is intentionally absent from the collapsed display list.
@@ -303,9 +301,8 @@ export class MainPage implements AfterViewInit {
    * Stop the player before leaving the page
    */
   async ionViewWillLeave() {
-    // clear reference to myself
     this.recordingsService.mainPageRef = undefined;
-
+    ++this.playRequestId;
     await this.stopPlayer();
     // this._subs.unsubscribe();
   }
@@ -325,6 +322,10 @@ export class MainPage implements AfterViewInit {
     requestAnimationFrame(() => this.scrollViewport()?.checkViewportSize());
   }
 
+  private updateSelectedCount(): void {
+    this.selectedCount.set(this.recordingsService.recordings().filter(r => !!r.selected).length);
+  }
+
   async refreshList(event?: RefresherCustomEvent) {
     this.clearSelection();
     try {
@@ -339,8 +340,10 @@ export class MainPage implements AfterViewInit {
     ++this.playRequestId;
     this.recordingsService.recordings().forEach(r => r.selected = false);
     this.selectedItem.set(undefined);
+    this.selectedCount.set(0);
     this.isMultiselect.set(false);
     this.cdr.markForCheck();
+    this.remeasureViewport();
   }
 
   getSelectedItems(): Recording[] {
@@ -362,20 +365,6 @@ export class MainPage implements AfterViewInit {
     this.isSearch.set(false);
     // this.updateFilter();
   }
-
-  /** Toggle expansion for a contact group. */
-  protected toggleExpand(groupKey: string) {
-    if (this.expandedGroupKey() === groupKey) {
-      const selected = this.selectedItem();
-      if (selected && this.getGroupKey(selected) === groupKey && !this.isGroupHeader(selected)) {
-        this.clearSelection();
-      }
-      this.expandedGroupKey.set(undefined);
-    } else {
-      this.expandedGroupKey.set(groupKey);
-    }
-  }
-
 
   /**
    * Helper to check if a recording is the header of its group
@@ -411,8 +400,8 @@ export class MainPage implements AfterViewInit {
    * Deletes the given recording file (and its companion JSON metadata)
    */
   async deleteItems(items: Recording[]) {
-
-    this.player()?.pause();
+    if (!items.length) return;
+    await this.player()?.pause();
 
     // show confirmation alert
     await this.mbs.showConfirm({
@@ -568,8 +557,12 @@ export class MainPage implements AfterViewInit {
    * Select all items
    */
   async selectAll() {
+    // In collapsed mode this still selects ALL matching source recordings.
+    this.clearSelection();
     this.isMultiselect.set(true);
     this.sortedItems().forEach(i => i.selected = true);
+    this.updateSelectedCount();
+    this.cdr.markForCheck();
   }
 
   /**
@@ -614,14 +607,12 @@ Duration: ${this.toHms.transform(item.duration)}
    * Start multiselection and select the given item
    */
   protected startMultiselection(item?: Recording) {
-    if (!this.isMultiselect()) {
-      this.clearSelection();
-      this.isMultiselect.set(true);
-      if (item) {
-        item.selected = true;
-      }
-      this.cdr.markForCheck();
-    }
+    if (this.isMultiselect()) return;
+    this.clearSelection();
+    this.isMultiselect.set(true);
+    if (item) item.selected = true;
+    this.updateSelectedCount();
+    this.cdr.markForCheck();
   }
 
   /**

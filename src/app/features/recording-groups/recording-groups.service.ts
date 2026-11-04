@@ -48,20 +48,21 @@ export class RecordingGroupsService {
   }
 
   getGroupKey(recording: Recording, defaultCountryPrefix: string): string {
-    const name = recording.opName.trim().normalize('NFKC').replace(/\s+/g, ' ').toLocaleLowerCase();
+    // Phone identity wins over display name. Contact names can change and
+    // different callers can share the same label; neither should corrupt groups.
+    let number = isPhoneNumber(recording.opNumber)
+      ? cleanupPhoneNumber(recording.opNumber) : '';
+    const prefix = cleanupPhoneNumber(defaultCountryPrefix);
+    if (prefix && number.startsWith('0')) number = prefix + number.substring(1);
+    if (number) return `number:${number}`;
+
+    const name = (recording.opName || '').trim().normalize('NFKC')
+      .replace(/\s+/g, ' ').toLocaleLowerCase();
     if (name && name !== UNKNOWN_NAME_OR_NUMBER && !isPhoneNumber(recording.opName)) {
       return `name:${name}`;
     }
-
-    let number = cleanupPhoneNumber(recording.opNumber);
-    const prefix = cleanupPhoneNumber(defaultCountryPrefix);
-
-    if (prefix && number.startsWith('0')) {
-      number = prefix + number.substring(1);
-    }
-
-    // Never merge all private/unknown calls into one unrelated contact.
-    return number ? `number:${number}` : `recording:${recording.audioUri}`;
+    // Unknown/private calls are unrelated unless there is stable identity.
+    return `recording:${recording.audioUri}`;
   }
 
   isGroupHeader(
