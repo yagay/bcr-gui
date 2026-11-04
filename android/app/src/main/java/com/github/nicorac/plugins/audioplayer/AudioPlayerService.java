@@ -216,10 +216,13 @@ public class AudioPlayerService extends MediaSessionService {
       setOutputDevice(DEVICE_LOUDSPEAKER);
       player.setMediaItem(mediaItem);
 
-      // attach events listener
+      // Any callbacks from a released old ExoPlayer must not change the
+      // new session's readiness, notification or foreground state.
+      final ExoPlayer preparedPlayer = player;
       player.addListener(new ExoPlayer.Listener() {
         @Override
         public void onPlaybackStateChanged(int playbackState) {
+          if (player != preparedPlayer) return;
           switch (playbackState) {
             case ExoPlayer.STATE_READY:
               // this state is returned both after prepare and after Play/Pause changes
@@ -249,6 +252,7 @@ public class AudioPlayerService extends MediaSessionService {
 
         @Override
         public void onIsPlayingChanged(boolean isPlaying) {
+          if (player != preparedPlayer) return;
           if (isPlaying) {
             // acquire wakelock (if enabled)
             if (wakeLockPlay != null && !wakeLockPlay.isHeld()) {
@@ -291,6 +295,8 @@ public class AudioPlayerService extends MediaSessionService {
       player.prepare();
 
     } catch (Exception e) {
+      // Preparation errors must not leave a half-initialized session behind.
+      unload();
       call.reject("Error initializing player for audio file: " + fileUriStr + " - " + e.getMessage());
       return;
     }
