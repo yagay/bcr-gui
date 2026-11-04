@@ -45,5 +45,11 @@
 .history-empty {position:absolute;top:32%;left:0;width:100%;display:flex;flex-direction:column;
   align-items:center;gap:8px;text-align:center;color:var(--ion-color-step-600);font-size:13px;pointer-events:none;}
 .history-empty strong {font-size:15px;font-weight:600;}
+.history-empty span {max-width:90%;overflow-wrap:anywhere;}
+.history-empty button,.history-scan-warning button {border:1px solid var(--ion-color-primary);
+  background:var(--ion-color-step-100);color:var(--ion-color-primary);border-radius:8px;padding:7px 11px;pointer-events:auto;}
+.history-scan-warning {position:absolute;bottom:12px;left:10px;right:10px;display:flex;align-items:center;
+  justify-content:space-between;gap:8px;padding:8px 12px;border-radius:9px;background:var(--ion-color-step-100);
+  border:1px solid var(--ion-color-step-250);font-size:12px;z-index:2;}
 .player-engine {position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;}
 .collapsed-player-dock {flex:0 0 78px;min-height:78px;border-top:1px solid var(--ion-color-step-200);}

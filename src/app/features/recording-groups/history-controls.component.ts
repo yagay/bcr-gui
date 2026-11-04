@@ -62,15 +62,15 @@ export type HistoryDirection = 'all' | 'in' | 'out' | 'voip';
       background:var(--ion-color-step-100);color:var(--ion-text-color);}
     .direction-row button.active {background:var(--ion-color-primary);
       color:var(--ion-color-primary-contrast);font-weight:600;}
-    .summary-row {display:flex;align-items:center;justify-content:space-between;gap:8px;
+    .summary-row {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;
       padding:7px 14px;border-bottom:1px solid var(--ion-color-step-150);}
     .counts {display:flex;gap:10px;flex-wrap:wrap;min-width:0;font-size:12px;color:var(--ion-color-step-650);}
-    .controls {display:flex;gap:7px;align-items:center;white-space:nowrap;}
+    .controls {display:flex;gap:7px;align-items:center;white-space:nowrap;min-width:0;max-width:100%;}
     .controls button {height:32px;border:1px solid var(--ion-color-step-250);background:var(--ion-color-step-50);
       border-radius:8px;color:var(--ion-text-color);font-size:12px;padding:0 8px;}
     .controls button.icon-button {min-width:32px;font-size:22px;padding:0;}
     .controls button:disabled {opacity:.4;}
-    .sort-select {max-width:118px;height:32px;border-radius:8px;border:1px solid var(--ion-color-step-250);background:var(--ion-color-step-50);color:var(--ion-text-color);font-size:12px;}
+    .sort-select {max-width:118px;min-width:0;height:32px;border-radius:8px;border:1px solid var(--ion-color-step-250);background:var(--ion-color-step-50);color:var(--ion-text-color);font-size:12px;}
   `]
 })
 export class HistoryControlsComponent {

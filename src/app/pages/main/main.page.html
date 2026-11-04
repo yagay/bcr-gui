@@ -6,10 +6,16 @@
   </ion-buttons>
   <ion-buttons slot="end">
     <ion-label>{{ selectedCount() }} {{ isZh ? '条已选' : 'selected' }}</ion-label>
+    <ion-button (click)="deselectAll()" [disabled]="selectedCount() === 0" aria-label="Deselect all">
+      <ion-icon name="remove-circle-outline" slot="icon-only" />
+    </ion-button>
+    <ion-button (click)="invertSelection()" aria-label="Invert selected recordings">
+      <ion-icon name="swap-horizontal-outline" slot="icon-only" />
+    </ion-button>
     <ion-button (click)="selectAll()" aria-label="Select all recordings">
       <ion-icon src="/assets/icons/select-all.svg" slot="icon-only" />
     </ion-button>
-    <ion-button (click)="deleteItems(getSelectedItems())" aria-label="Delete selected recordings">
+    <ion-button (click)="deleteItems(getSelectedItems())" [disabled]="selectedCount() === 0" aria-label="Delete selected recordings">
       <ion-icon name="trash" slot="icon-only" />
     </ion-button>
   </ion-buttons>
@@ -60,10 +66,32 @@
         </ng-container>
       </cdk-virtual-scroll-viewport>
       <app-virtual-scrollbar class="virtual-scrollbar" [virtualScrollViewport]="vsv" />
-      @if (items().length === 0 && recordingsService.refreshProgress() === undefined) {
-        <div class="history-empty">
-          <strong>{{ isZh ? '没有匹配的录音' : 'No matching recordings' }}</strong>
-          <span>{{ isZh ? '请尝试调整搜索、筛选或录音目录' : 'Try another filter, search or recording directory' }}</span>
+      @if (items().length === 0) {
+        <div class="history-empty" role="status" aria-live="polite">
+          @if (initializing() || isRefreshing()) {
+            <strong>{{ isZh ? '正在读取录音…' : 'Loading recordings…' }}</strong>
+            <span>{{ isZh ? '正在建立录音列表' : 'Indexing recording files' }}</span>
+          } @else if (recordingsService.lastRefreshError()) {
+            <strong>{{ isZh ? '读取录音时发生错误' : 'Could not load recordings' }}</strong>
+            <span>{{ recordingsService.lastRefreshError() }}</span>
+            <button type="button" (click)="refreshFromToolbar()">{{ isZh ? '重试' : 'Retry' }}</button>
+          } @else if (!settings.recordingsDirectoryUri) {
+            <strong>{{ isZh ? '尚未选择录音目录' : 'Recording directory not selected' }}</strong>
+            <span>{{ isZh ? '请选择或刷新录音目录' : 'Choose or refresh the recording directory' }}</span>
+          } @else if (indexedCount() === 0) {
+            <strong>{{ isZh ? '没有录音文件' : 'No recordings yet' }}</strong>
+            <span>{{ isZh ? '新录音会在扫描后出现在这里' : 'Your recordings will appear here after a scan' }}</span>
+          } @else {
+            <strong>{{ isZh ? '没有匹配的录音' : 'No matching recordings' }}</strong>
+            <span>{{ isZh ? '调整搜索内容或通话类型筛选' : 'Try different search or call filters' }}</span>
+            <button type="button" (click)="resetFilters()">{{ isZh ? '清除筛选' : 'Clear filters' }}</button>
+          }
+        </div>
+      }
+      @if (items().length > 0 && recordingsService.lastRefreshError() && !isRefreshing()) {
+        <div class="history-scan-warning" role="status">
+          {{ isZh ? '最近一次扫描失败，当前显示已有录音' : 'Last scan failed; showing existing recordings' }}
+          <button type="button" (click)="refreshFromToolbar()">{{ isZh ? '重试' : 'Retry' }}</button>
         </div>
       }
     </section>
