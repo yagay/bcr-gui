@@ -16,8 +16,9 @@ import { I18nService } from 'src/app/services/i18n.service';
 import { MessageBoxService } from 'src/app/services/message-box.service';
 import { RecordingsService } from 'src/app/services/recordings.service';
 import { SettingsService } from 'src/app/services/settings.service';
-import { buildRecordingHistory, projectRecordingHistory, historyConsistency, filterRecordingDirection, HistoryFilter, buildDisplayRows, HistoryDisplayRow } from 'src/app/features/recording-groups/recording-history.model';
+import { buildRecordingHistory, projectRecordingHistory, historyConsistency, filterRecordingDirection, HistoryFilter } from 'src/app/features/recording-groups/recording-history.model';
 import { SortModeEnum } from 'src/app/utils/recordings-sorter';
+import { buildDisplayRows, HistoryDisplayRow, actionRecords } from 'src/app/features/recording-groups/history-display-rows';
 import { untilTrue } from 'src/app/utils/waitForAsync';
 import { AndroidSAF } from 'src/plugins/androidsaf';
 import { ErrorCode } from 'src/plugins/bcrgui';
@@ -235,9 +236,12 @@ export class MainPage implements AfterViewInit {
   }
 
   private groupActionRecords(item: Recording): Recording[] {
-    return this.showAllRecordings()
-      ? [item]
-      : (this.groups().get(this.getGroupKey(item)) ?? [item]);
+    return actionRecords(
+      item,
+      this.showAllRecordings() || this.isGroupHeader(item),
+      !this.showAllRecordings(),
+      this.groups().get(this.getGroupKey(item)) ?? [item],
+    );
   }
 
   protected rowSelected(item: Recording): boolean {

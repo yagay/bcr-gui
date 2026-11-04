@@ -61,18 +61,3 @@ export function historyConsistency(
   };
 }
 
-/** Each virtual item has exactly one row's height, including the inline player. */
-export type HistoryDisplayRow =
-  | { kind: 'recording'; recording: Recording; key: string }
-  | { kind: 'player'; recording: Recording; key: string };
-
-export function buildDisplayRows(recordings: Recording[], activeUri?: string): HistoryDisplayRow[] {
-  const rows: HistoryDisplayRow[] = [];
-  for (const recording of recordings) {
-    rows.push({ kind: 'recording', recording, key: recording.audioUri });
-    if (activeUri === recording.audioUri) {
-      rows.push({ kind: 'player', recording, key: 'player:' + recording.audioUri });
-    }
-  }
-  return rows;
-}

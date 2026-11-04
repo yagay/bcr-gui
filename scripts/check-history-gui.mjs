@@ -16,6 +16,9 @@ assert(!page.includes('<ion-card'), 'The old variable-height card list must not 
 assert(page.includes('[itemSize]="itemHeight"'), 'CDK must use the fixed model row height');
 assert(controller.includes('protected itemHeight = 78;'), 'The controller row height has changed');
 assert(row.includes('height:78px'), 'The row height no longer matches CDK itemSize');
+assert(page.includes("entry.kind === 'recording'"), 'Missing fixed-size inline player row');
+assert(page.includes('class="inline-playback"'), 'Missing inline timeline');
+assert(controller.includes('buildDisplayRows('), 'View must use the unified row projection');
 assert(page.includes('<app-history-controls'), 'Filter controls must be independent');
 assert(page.includes('<app-history-details'), 'Recording details must stay outside the viewport');
 assert(page.indexOf('<app-history-details') > page.indexOf('</cdk-virtual-scroll-viewport>'),

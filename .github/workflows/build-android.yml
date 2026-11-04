@@ -41,6 +41,9 @@ jobs:
       - name: Guard the one-player fixed-row GUI architecture
         run: node scripts/check-history-gui.mjs
 
+      - name: Execute history GUI regression tests (Node 24 TypeScript)
+        run: node --experimental-strip-types --test scripts/tests/history-display-rows.test.ts
+
       - name: Validate recording-history invariants (TypeScript)
         run: npx tsc --noEmit --project tsconfig.history-spec.json
 
