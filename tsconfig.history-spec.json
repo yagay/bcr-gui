@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.spec.json",
+  "compilerOptions": { "noEmit": true },
+  "files": ["src/app/features/recording-groups/recording-history.model.spec.ts"],
+  "include": ["src/**/*.d.ts"]
+}

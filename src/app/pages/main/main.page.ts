@@ -16,7 +16,7 @@ import { I18nService } from 'src/app/services/i18n.service';
 import { MessageBoxService } from 'src/app/services/message-box.service';
 import { RecordingsService } from 'src/app/services/recordings.service';
 import { SettingsService } from 'src/app/services/settings.service';
-import { filterList } from 'src/app/utils/filterList';
+import { buildRecordingHistory, projectRecordingHistory, historyConsistency } from 'src/app/features/recording-groups/recording-history.model';
 import { sortRecordings } from 'src/app/utils/recordings-sorter';
 import { bringIntoView } from 'src/app/utils/scroll';
 import { untilTrue } from 'src/app/utils/waitForAsync';
@@ -84,12 +84,11 @@ export class MainPage implements AfterViewInit {
   // Filtered and sorted recordings before the collapsed contact view is applied.
   // Playback, multiselection and intent handling must keep using the full list.
   private sortedItems = computed<Recording[]>(() => {
-    const filteredItems = filterList(
+    const sortedItems = buildRecordingHistory(
       this.recordingsService.recordings(),
       this.searchValue(),
-      r => `${r.opName} ${r.opNumber}`
+      this.settings.recordingsSortMode,
     );
-    const sortedItems = sortRecordings(filteredItems, this.settings.recordingsSortMode);
 
     // Preserve the upstream behavior: a selected recording must be cleared when
     // it is no longer part of the filtered list.
@@ -110,11 +109,18 @@ export class MainPage implements AfterViewInit {
   ));
 
   // filtered and grouped items collection
-  protected items = computed(() => this.recordingGroups.flattenGroups(
+  protected items = computed(() => projectRecordingHistory(
     this.groups(),
+    this.recordingGroups,
     this.settings.recordingsSortMode,
     this.settings.defaultCountryPrefix,
   ));
+  // The source count is intentionally independent of the expanded/collapsed
+  // CDK rows. Grouping must never change the number of indexed recordings.
+  protected indexedCount = computed(() => this.recordingsService.recordings().length);
+  protected visibleCount = computed(() => this.items().length);
+  protected groupCount = computed(() => this.groups().size);
+  protected historyIntegrity = computed(() => historyConsistency(this.sortedItems(), this.groups()));
 
   protected topIndex = 0; // index of top shown recording
   protected itemHeight = 78;
@@ -220,12 +226,27 @@ export class MainPage implements AfterViewInit {
 
   async ngAfterViewInit() {
     await this.recordingsService.initialize();
+    // Data arrives asynchronously after SAF scan: let CDK recalculate the
+    // viewport without changing its fixed itemSize or replacing DOM siblings.
+    this.remeasureViewport();
   }
 
-  refreshList(event?: RefresherCustomEvent) {
-    event?.target.complete();
+  async ionViewDidEnter() {
+    this.remeasureViewport();
+  }
+
+  private remeasureViewport(): void {
+    requestAnimationFrame(() => this.scrollViewport()?.checkViewportSize());
+  }
+
+  async refreshList(event?: RefresherCustomEvent) {
     this.clearSelection();
-    return this.recordingsService.refreshContent();
+    try {
+      await this.recordingsService.refreshContent();
+    } finally {
+      await event?.target.complete();
+      this.remeasureViewport();
+    }
   }
 
   clearSelection() {
@@ -356,8 +377,9 @@ export class MainPage implements AfterViewInit {
       onConfirm: async () => {
         // forcibly unload audio
         await this.player()?.unload();
-        this.recordingsService.deleteRecording(items);
+        await this.recordingsService.deleteRecording(items);
         this.clearSelection();
+        this.remeasureViewport();
       }
     });
 

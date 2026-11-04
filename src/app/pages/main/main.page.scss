@@ -156,3 +156,23 @@
 .multiselect .item.selected {
   height: var(--item-height);
 }
+
+/* Flat-list visual variant of the proven original recording view.
+   Do not change row heights, CDK offsets, scroll containers, or player flow. */
+.items .item {
+  border-radius: 8px;
+  border: 1px solid var(--ion-color-step-150);
+  box-shadow: none;
+  background: var(--ion-background-color);
+}
+.items .item.child-item {
+  border-left: 3px solid var(--ion-color-primary);
+  box-shadow: none;
+}
+.items .item.selected {
+  border-color: var(--ion-color-primary);
+  box-shadow: none;
+}
+.items .item ion-card-header {
+  --background: transparent;
+}
