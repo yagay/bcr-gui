@@ -133,6 +133,10 @@ export class MainPage implements AfterViewInit {
     this.remeasureViewport();
   }
 
+  protected isRowPlaying(item: Recording): boolean {
+    return this.selectedItem() === item && this.player()?.isPlaying() === true;
+  }
+
   protected onPlayRow(item: Recording) {
     if (this.isMultiselect()) return;
     void this.selectAndPlay(item);
