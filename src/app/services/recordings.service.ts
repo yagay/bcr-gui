@@ -67,6 +67,7 @@ export class RecordingsService {
    * 0 < value <=1  ==> refresh progress (%)
    */
   public refreshProgress = signal<number|undefined>(undefined);
+  public readonly lastRefreshError = signal<string | undefined>(undefined);
   public isUpdatingDurations = false;
 
   constructor(
@@ -121,6 +122,7 @@ export class RecordingsService {
     }
 
     // immediately send a progress
+    this.lastRefreshError.set(undefined);
     this.refreshProgress.set(0.001);
     this.scanCounts = { directories: 0, entries: 0, audio: 0, metadata: 0, other: 0, failedDirectories: 0, newRecords: 0, reusedRecords: 0, metadataFallbacks: 0, partial: false };
     this.scanFileTypes = [];
@@ -359,6 +361,7 @@ export class RecordingsService {
     }
     catch(error: any) {
       this.logScan('SCAN_ERROR code=' + String(error?.code || 'unknown'));
+      this.lastRefreshError.set(String(error?.message || error?.code || 'Failed to read recordings'));
       if (error.code === ErrorCode.ERR_INVALID_URI) {
         this.selectRecordingsDirectory(() => this.refreshContent());
       }

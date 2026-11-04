@@ -106,6 +106,9 @@ export class MainPage implements AfterViewInit, OnDestroy {
   protected displayCount = computed(() => this.displayRows().length);
   protected indexedCount = computed(() => this.recordingsService.recordings().length);
   protected selectedCount = signal(0);
+  protected initializing = signal(true);
+  protected scrubbing = signal(false);
+  protected scrubPosition = signal(0);
   protected sortMode = signal<SortModeEnum>(this.settings.recordingsSortMode);
   protected isRefreshing = computed(() => this.recordingsService.refreshProgress() !== undefined);
   protected visibleCount = computed(() => this.items().length);
@@ -125,14 +128,41 @@ export class MainPage implements AfterViewInit, OnDestroy {
     return entry.key;
   }
 
-  protected inlineProgress(): number { return this.player()?.currentPosition() ?? 0; }
+  protected inlineProgress(): number { return this.scrubbing() ? this.scrubPosition() : (this.player()?.currentPosition() ?? 0); }
   protected inlineDuration(): number { return this.player()?.totalDuration() ?? this.selectedItem()?.duration ?? 0; }
   protected inlinePlaying(): boolean { return this.player()?.playingState() === true; }
   protected inlineReady(): boolean { return this.selectedItem() !== undefined && this.player()?.isReadyFor(this.selectedItem()!) === true; }
   protected inlineFailed(): boolean { return this.player()?.failedState() === true; }
+  protected previewSeek(event: Event): void {
+    const position = Number((event.target as HTMLInputElement).value);
+    if (Number.isFinite(position)) {
+      this.scrubbing.set(true);
+      this.scrubPosition.set(position);
+    }
+  }
+
   protected seekInline(event: Event): void {
     const position = Number((event.target as HTMLInputElement).value);
     if (Number.isFinite(position)) void this.player()?.seekTo(position);
+    this.scrubbing.set(false);
+  }
+
+  protected seekRelative(direction: -1 | 1): void {
+    if (!this.inlineReady()) return;
+    const target = (this.player()?.currentPosition() ?? 0) + direction * this.settings.seekTime;
+    void this.player()?.seekTo(target);
+  }
+
+  protected canSkip(direction: SkipDirection): boolean {
+    const index = this.sortedItems().findIndex(record => record === this.selectedItem());
+    const target = index + (direction === 'next' ? 1 : -1);
+    return index >= 0 && target >= 0 && target < this.sortedItems().length;
+  }
+
+  // When a playing child recording is folded away, keep its controls reachable.
+  protected inlinePlayerVisible(): boolean {
+    const item = this.selectedItem();
+    return !!item && this.items().some(row => row.audioUri === item.audioUri);
   }
   protected toggleInline(): void {
     const item = this.selectedItem();
@@ -164,14 +194,10 @@ export class MainPage implements AfterViewInit, OnDestroy {
     this.remeasureViewport();
   }
 
-  protected toggleGroup(item: Recording) {
+  protected toggleGroup(item: Recording): void {
     if (this.showAllRecordings() || this.isMultiselect()) return;
-    const key = this.getGroupKey(item);
-    if (this.expandedGroupKey() === key && this.selectedItem()
-      && this.getGroupKey(this.selectedItem()!) === key
-      && this.selectedItem() !== item) {
-      this.clearSelection();
-    }
+    // Only affect the presentation. Do not deselect, pause or unload the
+    // recording currently playing within a collapsed contact group.
     this.recordingGroups.toggle(item, this.settings.defaultCountryPrefix);
     this.remeasureViewport();
   }
@@ -181,7 +207,10 @@ export class MainPage implements AfterViewInit, OnDestroy {
   }
 
   protected onPlayRow(item: Recording) {
-    if (this.isMultiselect()) return;
+    if (this.isMultiselect()) {
+      this.onRowClick(item);
+      return;
+    }
     void this.selectAndPlay(item);
   }
 
@@ -224,6 +253,7 @@ export class MainPage implements AfterViewInit, OnDestroy {
       this.recordingGroups.expand(item, this.settings.defaultCountryPrefix);
     }
     this.selectedItem.set(item);
+    this.scrubbing.set(false);
     this.isMultiselect.set(false);
     this.selectedCount.set(0);
     this.cdr.markForCheck();
@@ -260,6 +290,7 @@ export class MainPage implements AfterViewInit, OnDestroy {
     }
     if (!this.showAllRecordings() && this.isGroupHeader(item) && this.getGroupCount(item) > 1) {
       this.toggleGroup(item);
+      return;
     }
     if (this.selectedItem() === item) {
       this.clearSelection();
@@ -380,6 +411,7 @@ export class MainPage implements AfterViewInit, OnDestroy {
     try {
       await this.recordingsService.initialize();
     } finally {
+      this.initializing.set(false);
       this.cdr.markForCheck();
       this.remeasureViewport();
     }
@@ -422,6 +454,7 @@ export class MainPage implements AfterViewInit, OnDestroy {
     ++this.playRequestId;
     this.recordingsService.recordings().forEach(r => r.selected = false);
     this.selectedItem.set(undefined);
+    this.scrubbing.set(false);
     this.selectedCount.set(0);
     this.isMultiselect.set(false);
     this.cdr.markForCheck();
@@ -697,6 +730,19 @@ Duration: ${this.toHms.transform(item.duration)}
     this.clearSelection();
     this.isMultiselect.set(true);
     if (item) this.groupActionRecords(item).forEach(record => record.selected = true);
+    this.updateSelectedCount();
+    this.cdr.markForCheck();
+  }
+
+  protected invertSelection(): void {
+    if (!this.isMultiselect()) return;
+    for (const item of this.sortedItems()) item.selected = !item.selected;
+    this.updateSelectedCount();
+    this.cdr.markForCheck();
+  }
+
+  protected deselectAll(): void {
+    for (const item of this.recordingsService.recordings()) item.selected = false;
     this.updateSelectedCount();
     this.cdr.markForCheck();
   }
