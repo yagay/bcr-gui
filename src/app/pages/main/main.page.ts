@@ -163,6 +163,7 @@ export class MainPage implements AfterViewInit {
     this.clearSelection();
     this.showEachRecording.update(value => !value);
     this.scrollViewport()?.scrollToIndex(0);
+    this.refreshViewportLayout();
   }
   protected detailRecords = computed(() => {
     const key = this.detailGroupKey();
@@ -274,14 +275,35 @@ export class MainPage implements AfterViewInit {
     // this._subs.unsubscribe();
   }
 
-  async ngAfterViewInit() {
-    await this.recordingsService.initialize();
+  /**
+   * Ionic may measure the CDK viewport before the page has its final height.
+   * Recheck after navigation and asynchronous SAF indexing so the entire
+   * recording list is rendered rather than only its initial few rows.
+   */
+  private refreshViewportLayout(): void {
+    requestAnimationFrame(() => {
+      this.cdr.detectChanges();
+      this.scrollViewport()?.checkViewportSize();
+    });
   }
 
-  refreshList(event?: RefresherCustomEvent) {
-    event?.target.complete();
+  async ionViewDidEnter() {
+    this.refreshViewportLayout();
+  }
+
+  async ngAfterViewInit() {
+    await this.recordingsService.initialize();
+    this.refreshViewportLayout();
+  }
+
+  async refreshList(event?: RefresherCustomEvent) {
     this.clearSelection();
-    return this.recordingsService.refreshContent();
+    try {
+      await this.recordingsService.refreshContent();
+    } finally {
+      event?.target.complete();
+      this.refreshViewportLayout();
+    }
   }
 
   clearSelection() {
@@ -320,6 +342,7 @@ export class MainPage implements AfterViewInit {
     this.clearSelection();
     this.callFilter.set(filter);
     this.scrollViewport()?.scrollToIndex(0);
+    this.refreshViewportLayout();
   }
 
   protected filterLabel(label: { zh: string; en: string }): string {
