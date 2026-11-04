@@ -9,7 +9,7 @@ import { MessageBoxService } from 'src/app/services/message-box.service';
 import { RecordingsService } from 'src/app/services/recordings.service';
 import { SortModeEnum } from 'src/app/utils/recordings-sorter';
 import version from 'src/app/version';
-import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
@@ -46,11 +46,6 @@ export class SettingsPage {
   private backSub?: Subscription;
 
   public readonly IMPORT_EXPORT_FILENAME = "bcr-gui.settings.json";
-  protected importedLogName = signal("");
-  protected importedLogText = signal("");
-  protected importedLogLines = signal(0);
-  protected importedLogTruncated = signal(false);
-  private readonly maxLogBytes = 2 * 1024 * 1024;
 
   constructor(
     private dtp: DatetimePipe,
@@ -80,35 +75,6 @@ export class SettingsPage {
   }
 
 
-  /** Import a text log for local viewing; never change settings or recordings. */
-  protected async importDiagnosticLog(event: Event): Promise<void> {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = '';
-    if (!file) return;
-    if (file.size > this.maxLogBytes) {
-      await this.messageBoxService.showError({ message: 'Log exceeds 2 MB / 日志超过 2 MB，请截取相关部分。' });
-      return;
-    }
-    try {
-      const content = await file.text();
-      if (content.includes('\0')) throw new Error('Binary logs are not supported');
-      this.importedLogName.set(file.name);
-      this.importedLogLines.set(content.split(/\r?\n/).length);
-      this.importedLogTruncated.set(content.length > 80000);
-      this.importedLogText.set(content.slice(0, 80000));
-    } catch (error) {
-      await this.messageBoxService.showError({ error });
-    }
-  }
-
-  protected clearImportedLog(): void {
-    this.importedLogName.set('');
-    this.importedLogText.set('');
-    this.importedLogLines.set(0);
-    this.importedLogTruncated.set(false);
-  }
-
   /** Share recording-index counts without exporting contacts or file paths. */
   protected async exportDiagnosticReport(): Promise<void> {
     const recordings = this.recordingsService.recordings();
@@ -121,6 +87,8 @@ export class SettingsPage {
       folderCounts.set(folder, (folderCounts.get(folder) || 0) + 1);
     }
     const report = [
+      this.recordingsService.exportScanDiagnostics(),
+      '',
       'BCR-GUI recording index diagnostics',
       'Generated: ' + new Date().toISOString(),
       'Indexed recordings: ' + recordings.length,
@@ -134,12 +102,12 @@ export class SettingsPage {
     ].join('\n');
     try {
       const output = await Filesystem.writeFile({
-        path: 'bcr-gui-diagnostic.txt',
+        path: 'bcr-gui-diagnostic-log.txt',
         directory: Directory.Cache,
         encoding: Encoding.UTF8,
         data: report,
       });
-      await Share.share({ title: 'BCR-GUI diagnostics', url: output.uri });
+      await Share.share({ title: 'BCR-GUI diagnostic log', url: output.uri });
     } catch (error) {
       await this.messageBoxService.showError({ error });
     }
