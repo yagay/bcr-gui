@@ -85,6 +85,7 @@ export class HistoryRecordingRowComponent {
   readonly playing = input(false);
   readonly multiselect = input(false);
   readonly zh = input(false);
+  readonly hour12 = input(false);
   readonly opened = output<void>();
   readonly playClicked = output<void>();
   readonly expandedClicked = output<void>();
@@ -115,7 +116,7 @@ export class HistoryRecordingRowComponent {
     const date = this.recording().date;
     if (!Number.isFinite(date) || date <= 0) return '';
     return new Intl.DateTimeFormat(this.zh() ? 'zh-CN' : 'en-GB', {
-      month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false
+      year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:this.hour12()
     }).format(new Date(date));
   }
 }

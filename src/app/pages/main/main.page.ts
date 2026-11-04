@@ -302,6 +302,7 @@ export class MainPage implements AfterViewInit {
   }
 
   async ionViewWillEnter() {
+    this.sortMode.set(this.settings.recordingsSortMode);
 
     // save reference to myself
     this.recordingsService.mainPageRef = this;
@@ -696,6 +697,11 @@ Duration: ${this.toHms.transform(item.duration)}
    * Skip to previous/next item
    */
   protected onSkip(direction: SkipDirection) {
+    // Like a media player, previous resets after 3 seconds; otherwise skip.
+    if (direction === 'prev' && (this.player()?.currentPosition() ?? 0) >= 3) {
+      void this.player()?.seekTo(0);
+      return;
+    }
     // Navigate the complete filtered history, never only collapsed summaries.
     const selectedItemIndex = this.sortedItems().findIndex(i => i === this.selectedItem());
     if (selectedItemIndex >= 0) {
