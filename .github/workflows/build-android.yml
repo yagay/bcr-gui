@@ -38,6 +38,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Guard Angular 18 effects against NG0600
+        run: node scripts/check-player-effect-writes.mjs
+
       - name: Build Angular frontend and validate call-history templates
         run: npm run build
 

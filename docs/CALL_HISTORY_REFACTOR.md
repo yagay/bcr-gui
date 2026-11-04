@@ -91,3 +91,24 @@ overall item count. When a recording is selected, the viewport's size
 is also checked after Angular applies the inserted row.
 
 No absolute-positioned overlay or extra blank spacer rows are used.
+
+
+## Angular 18 NG0600 regression (2026-11-04)
+
+After implementing serialized audio switching, the `AudioPlayerComponent`
+constructor's Angular `effect()` directly wrote to `ready`, `status`
+and `progress` signals. Angular 18 prohibits direct signal mutations
+inside an effect without opting in, so selecting/playing a recording could
+show the runtime error **NG0600**.
+
+Now the effect reads only its `recording()` input and delegates the
+existing synchronous state reset + queued native player switching via
+`untracked(() => this.scheduleRecordingSwitch(next))`. This retains the
+latest-generation and serialized native load/unload protections, without
+allowing unintended reactive dependencies or bypassing Angular's checks
+globally.
+
+The standalone GUI CI runs `scripts/check-player-effect-writes.mjs`,
+an AST-based guard against new direct Signal `.set()` or `.update()`
+inside this component's effects. That guard is static; full on-device
+Angular navigation and native audio playback must still be tested.
