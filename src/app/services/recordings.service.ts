@@ -33,6 +33,8 @@ export class RecordingsService {
   // Bounded, privacy-safe history scan events for diagnostic exports.
   private readonly scanEvents: string[] = [];
   private scanCounts: Record<string, number | boolean> = {};
+  private scanFileTypes: string[] = [];
+  private scanIndexStats: string[] = [];
   private logScan(message: string): void {
     this.scanEvents.push(new Date().toISOString() + ' ' + message);
     if (this.scanEvents.length > 250) this.scanEvents.shift();
@@ -45,6 +47,10 @@ export class RecordingsService {
       'Last completed scan: ' + (this.lastFullScan ? new Date(this.lastFullScan).toISOString() : 'none this process'),
       'Scan counts:',
       ...Object.entries(this.scanCounts).map(([key, value]) => '  ' + key + ': ' + value),
+      'File classification (extension + MIME, no filenames):',
+      ...this.scanFileTypes,
+      'Index and grouping diagnostics:',
+      ...this.scanIndexStats,
       'Events:',
       ...this.scanEvents,
       'Private paths, filenames and contacts are omitted.',
@@ -116,7 +122,9 @@ export class RecordingsService {
 
     // immediately send a progress
     this.refreshProgress.set(0.001);
-    this.scanCounts = { directories: 0, entries: 0, audio: 0, metadata: 0, failedDirectories: 0, newRecords: 0, reusedRecords: 0, metadataFallbacks: 0, partial: false };
+    this.scanCounts = { directories: 0, entries: 0, audio: 0, metadata: 0, other: 0, failedDirectories: 0, newRecords: 0, reusedRecords: 0, metadataFallbacks: 0, partial: false };
+    this.scanFileTypes = [];
+    this.scanIndexStats = [];
     this.logScan('SCAN_START');
 
     // Contact access is optional: a permission/provider failure must not hide audio.
@@ -188,6 +196,45 @@ export class RecordingsService {
       const metadataFilesObj = Object.fromEntries(indexedFiles
         .filter(({file}) => /\.json$/i.test(file.displayName))
         .map(({file, folder}) => [fileKey(file.displayName, folder), file]));
+
+      // Classify every SAF entry so ignored audio formats can be identified
+      // without exposing callers, file paths, or individual filenames.
+      const classification = new Map<string, number>();
+      let ignoredFiles = 0;
+      for (const { file, folder } of indexedFiles) {
+        const key = fileKey(file.displayName, folder);
+        const kind = key in audioFilesObj ? 'audio'
+          : key in metadataFilesObj ? 'metadata' : 'other';
+        if (kind === 'other') ignoredFiles++;
+        const extensionMatch = /\.([a-z0-9]{1,12})$/i.exec(file.displayName);
+        const extension = extensionMatch ? '.' + extensionMatch[1].toLowerCase() : '(no extension)';
+        const mime = (file.type || '(missing)').toLowerCase().slice(0, 100);
+        const classKey = kind + ' | ' + extension + ' | ' + mime;
+        classification.set(classKey, (classification.get(classKey) || 0) + 1);
+      }
+      this.scanFileTypes = Array.from(classification)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([name, count]) => '  ' + name + ': ' + count);
+      this.scanCounts['other'] = ignoredFiles;
+
+      const metadataKeys = new Set(Object.keys(metadataFilesObj));
+      let matchedMetadata = 0;
+      for (const audioKey of Object.keys(audioFilesObj)) {
+        const slash = audioKey.lastIndexOf('/');
+        const folder = slash >= 0 ? audioKey.slice(0, slash + 1) : '';
+        const name = slash >= 0 ? audioKey.slice(slash + 1) : audioKey;
+        const jsonKey = folder + replaceExtension(name, '.json');
+        if (metadataKeys.has(jsonKey)) {
+          matchedMetadata++;
+          metadataKeys.delete(jsonKey);
+        }
+      }
+      this.scanCounts['matchedMetadata'] = matchedMetadata;
+      this.scanCounts['orphanMetadata'] = metadataKeys.size;
+      this.scanCounts['audioMissingMetadata'] = Object.keys(audioFilesObj).length - matchedMetadata;
+      this.scanIndexStats.push('  matched metadata: ' + matchedMetadata);
+      this.scanIndexStats.push('  unmatched JSON files: ' + metadataKeys.size);
+      this.scanIndexStats.push('  audio without JSON: ' + (Object.keys(audioFilesObj).length - matchedMetadata));
 
       this.scanCounts['entries'] = indexedFiles.length;
       this.scanCounts['audio'] = Object.keys(audioFilesObj).length;
@@ -270,7 +317,40 @@ export class RecordingsService {
       this.lastUpdate = new Date().getTime();
       this.lastFullScan = this.lastUpdate;
       this.recordings.set(Object.values(currentDbObj));
-      this.logScan('SCAN_COMPLETE indexed=' + this.recordings().length);
+      const records = this.recordings();
+      let withNumber = 0;
+      let withName = 0;
+      let unknown = 0;
+      let badDate = 0;
+      const byNumber = new Set<string>();
+      const byName = new Set<string>();
+      for (const rec of records) {
+        const number = (rec.opNumber || '').trim();
+        const name = (rec.opName || '').trim();
+        if (isPhoneNumber(number)) {
+          withNumber++;
+          byNumber.add(number.replace(/[^\d+]/g, ''));
+        } else if (name && name !== UNKNOWN_NAME_OR_NUMBER && name !== rec.audioDisplayName) {
+          withName++;
+          byName.add(name.normalize('NFKC').toLowerCase());
+        } else {
+          unknown++;
+        }
+        if (!Number.isFinite(rec.date) || rec.date <= 0) badDate++;
+      }
+      this.scanCounts['recordsWithPhoneNumber'] = withNumber;
+      this.scanCounts['recordsWithNameOnly'] = withName;
+      this.scanCounts['unidentifiedRecords'] = unknown;
+      this.scanCounts['recordsWithInvalidDate'] = badDate;
+      this.scanCounts['uniquePhoneNumbers'] = byNumber.size;
+      this.scanCounts['uniqueNameOnlyGroups'] = byName.size;
+      this.scanIndexStats.push('  records with phone number: ' + withNumber);
+      this.scanIndexStats.push('  records with name only: ' + withName);
+      this.scanIndexStats.push('  unidentified records: ' + unknown);
+      this.scanIndexStats.push('  unique phone numbers: ' + byNumber.size);
+      this.scanIndexStats.push('  unique name-only groups: ' + byName.size);
+      this.scanIndexStats.push('  invalid dates: ' + badDate);
+      this.logScan('SCAN_COMPLETE indexed=' + records.length + ' ignored=' + ignoredFiles + ' orphanJSON=' + metadataKeys.size);
       await this.save(false);
 
       // start asynchronously (DO NOT AWAIT IT!)
