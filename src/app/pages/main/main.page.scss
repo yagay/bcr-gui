@@ -36,7 +36,6 @@
   border-bottom: 1px solid var(--ion-color-step-100);
   background: var(--ion-background-color);
   cursor: pointer;
-  transition: background-color .12s ease;
 }
 .call-row:active { background: var(--ion-color-step-100); }
 .call-row.selected { background: var(--ion-color-step-50); }
@@ -109,9 +108,6 @@
 }
 .mini-progress-times { font-size: 10px; }
 .player-panel { min-height: 0; max-height: 240px; overflow: auto; }
-.player-panel.collapsed { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+.player-panel.collapsed { display: none; }
 .player { display: block; padding: 8px 12px; background: var(--player-background-color); }
 .history-record a { color: var(--ion-color-primary); }
-@media (prefers-reduced-motion: reduce) {
-  .call-row { transition: none; }
-}
