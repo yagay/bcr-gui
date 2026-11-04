@@ -1,207 +1,124 @@
-<app-header
-  [title]="version.appName"
-  [actionButtons]="actionButtons"
-  [showCustomContent]="isMultiselect()"
->
-  <!-- custom toolbar content -->
-
-  <!-- stop multiselection -->
+<app-header [title]="version.appName" [showCustomContent]="isMultiselect()">
   <ion-buttons slot="start">
-    <ion-button (click)="clearSelection()">
-      <ion-icon icon="close" slot="icon-only" />
+    <ion-button (click)="clearSelection()" aria-label="Cancel selection">
+      <ion-icon name="close" slot="icon-only" />
     </ion-button>
   </ion-buttons>
-
-  <!-- action buttons -->
   <ion-buttons slot="end">
-    <ion-button (click)="selectAll()">
+    <ion-label>{{ selectedCount() }} {{ isZh ? '条已选' : 'selected' }}</ion-label>
+    <ion-button (click)="deselectAll()" [disabled]="selectedCount() === 0" aria-label="Deselect all">
+      <ion-icon name="remove-circle-outline" slot="icon-only" />
+    </ion-button>
+    <ion-button (click)="invertSelection()" aria-label="Invert selected recordings">
+      <ion-icon name="swap-horizontal-outline" slot="icon-only" />
+    </ion-button>
+    <ion-button (click)="selectAll()" aria-label="Select all recordings">
       <ion-icon src="/assets/icons/select-all.svg" slot="icon-only" />
     </ion-button>
-    <ion-button (click)="deleteItems(getSelectedItems())">
+    <ion-button (click)="deleteItems(getSelectedItems())" [disabled]="selectedCount() === 0" aria-label="Delete selected recordings">
       <ion-icon name="trash" slot="icon-only" />
     </ion-button>
-
-    <!-- actions context menu -->
-    <ion-popover trigger="context-menu-button" [dismissOnSelect]="true">
-      <ng-template>
-        <ion-content>
-          <ion-list lines="none" class="toolbar-menu-items">
-            <ion-item >
-              <ion-icon src="/assets/icons/select-all.svg" />
-              {{ 'LBL_SELECTALL' | translatePipe }}
-            </ion-item>
-            <ion-item (click)="deleteItems(getSelectedItems())">
-              <ion-icon name="trash" />
-              {{ 'LBL_DELETE' | translatePipe }}
-            </ion-item>
-          </ion-list>
-        </ion-content>
-      </ng-template>
-    </ion-popover>
-
   </ion-buttons>
-
 </app-header>
 
-<!-- search panel -->
-@if (isSearch()) {
-  <ion-toolbar>
-    <ion-searchbar #searchBar
-      show-clear-button="focus"
-      [debounce]="750"
-      [(ngModel)]="searchValue"
-      [placeholder]="'LBL_SEARCH' | translatePipe"
-      (ionClear)="clearFilter()"
-    />
-  </ion-toolbar>
-}
+<app-history-controls [zh]="isZh" [search]="searchValue()" [direction]="directionFilter()" [total]="indexedCount()"
+  [contactCount]="groupCount()" [matches]="historyIntegrity().sourceCount"
+  [hasFilter]="!!searchValue() || directionFilter() !== 'all'"
+  [allRecordings]="showAllRecordings()" [refreshing]="isRefreshing()" [sortMode]="sortMode()"
+  (searchChange)="setSearch($event)" (resetAll)="resetFilters()"
+  (sortChange)="setSortMode($event)" (directionChange)="setDirectionFilter($event)" (toggleView)="toggleViewMode()"
+  (refresh)="refreshFromToolbar()" />
 
-<!-- main content (list) -->
-<ion-content #content
-  id="main-content"
-  class="ion-padding main-content"
-  [class.disabled]="recordingsService.refreshProgress()"
-  [scrollY]="false"
->
-  <div class="content-wrapper">
-
-    <ion-list class="items"
-      lines="full"
-      [class.multiselect]="isMultiselect()"
-      [style.--item-height]="itemHeight + 'px'"
-      [style.--item-gap]="itemGap + 'px'"
-    >
-
-      @if (topIndex === 0) {
-        <ion-refresher
-          slot="fixed"
-          pullFactor=".5"
-          pullMin="60"
-          pullMax="120"
-          (ionRefresh)="refreshList($any($event))"
-        >
-          <ion-refresher-content
-            pullingIcon="refresh"
-            pullingText="{{ 'HOME_PULL_TO_REFRESH' | translatePipe }}"
-            refreshingSpinner="circles"
-            refreshingText="{{ 'HOME_REFRESHING' | translatePipe }}"
-          />
-        </ion-refresher>
-      }
-      <cdk-virtual-scroll-viewport #vsv
-        class="virtual-scroll-viewport ion-content-scroll-host"
-        [maxBufferPx]="1500"
-        [minBufferPx]="1000"
-        [itemSize]="itemHeight + itemGap"
-        (scrolledIndexChange)="onScroll($event)"
-      >
-
-        <!-- recording item -->
-        <ion-card *cdkVirtualFor="let item of items(); let index = index; trackBy: trackByUri"
-          class="item"
-          [class.selected]="item.selected"
-          [class.child-item]="!isGroupHeader(item)"
-        >
-          <div>
-
-            <!-- card content -->
-            <ion-card-header
-              (click)="onCardClick(item)"
-              longPress
-              (longPress)="startMultiselection(item)"
-            >
-              <app-recording-group-title
-                [recording]="item"
-                [isHeader]="isGroupHeader(item)"
-                [groupCount]="getGroupCount(item)"
-                [expanded]="expandedGroupKey() === getGroupKey(item)"
-                [selected]="!!item.selected"
-                (playRecording)="onItemClick($event)"
-              />
-              <ion-card-subtitle class="left-container subtitle">
-                <app-call-icon class="call-direction-icon" [direction]="item?.direction ?? ''" />
-                <span>{{ item?.date | datetime }}</span>
-                @if (item.duration) {
-                  • <span>{{ item.duration | toHms }}</span>
-                }
-              </ion-card-subtitle>
-            </ion-card-header>
-
-            @if (!isMultiselect() && item.selected) {
-              <ion-card-content class="content">
-
-                <div class="details-actions">
-
-                  <!-- details -->
-                  <div class="details">
-                    @if (item.opNumber) {
-                      <p>
-                        {{ 'HOME_REC_PHONE_NUMBER' | translatePipe}}:
-                        @if (isDialableNumber(item)) {
-                          <a
-                            class="phone-link"
-                            [href]="getDialUri(item)"
-                            (click)="$event.stopPropagation()"
-                          >{{ item.opNumber }}</a>
-                        } @else {
-                          {{ item.opNumber }}
-                        }
-                      </p>
-                    }
-                    <p>{{ 'HOME_REC_TYPE' | translatePipe}}: {{ item.mimeType }}</p>
-                    <p>{{ 'HOME_REC_SIZE' | translatePipe}}: {{ item.filesize | filesize }}</p>
-                  </div>
-
-                  <!-- action buttons -->
-                  <div class="actions">
-
-                    <!-- edit -->
-                    <ion-icon name="pencil"
-                      class="action"
-                      (click)="editItem(item)"
-                    />
-
-                    <!-- share -->
-                    <ion-icon name="share-social"
-                      class="action"
-                      (click)="shareRecording(item, $event)"
-                    />
-
-                    <!-- delete -->
-                    <ion-icon name="trash"
-                      class="action"
-                      (click)="deleteItems([item])"
-                    />
-
-                  </div>
-
-                </div>
-
-              </ion-card-content>
-            }
-
-          </div>
-
-        </ion-card>
-
+<ion-content id="main-content" class="main-content" [scrollY]="false">
+  <div class="history-layout">
+    <section class="history-list-area" [attr.aria-label]="isZh ? '录音历史' : 'Recording history'">
+      <ion-refresher slot="fixed" [disabled]="topIndex > 0" (ionRefresh)="refreshList($any($event))">
+        <ion-refresher-content refreshingSpinner="circles" />
+      </ion-refresher>
+      <cdk-virtual-scroll-viewport #vsv class="virtual-scroll-viewport ion-content-scroll-host"
+        [itemSize]="itemHeight" [minBufferPx]="480" [maxBufferPx]="960"
+        (scrolledIndexChange)="onScroll($event)" (scroll)="onViewportScroll()">
+        <ng-container *cdkVirtualFor="let entry of displayRows(); trackBy: trackByDisplayRow">
+          @if (entry.kind === 'recording') {
+            <app-history-recording-row
+              [recording]="entry.recording"
+              [isHeader]="showAllRecordings() || isGroupHeader(entry.recording)"
+              [groupCount]="showAllRecordings() ? 1 : getGroupCount(entry.recording)"
+              [expanded]="expandedGroupKey() === getGroupKey(entry.recording)"
+              [selected]="rowSelected(entry.recording)" [partial]="rowPartSelected(entry.recording)"
+              [playing]="isRowPlaying(entry.recording)"
+              [multiselect]="isMultiselect()" [zh]="isZh" [hour12]="settings.is12Hours"
+              (opened)="onRowClick(entry.recording)" (playClicked)="onPlayRow(entry.recording)"
+              (expandedClicked)="toggleGroup(entry.recording)"
+              (longPressed)="startMultiselection(entry.recording)" />
+          } @else {
+            <app-history-inline-player
+              [zh]="isZh" [position]="inlineProgress()" [duration]="inlineDuration()"
+              [playing]="inlinePlaying()" [ready]="inlineReady()" [failed]="inlineFailed()"
+              [speed]="playbackSpeed()" [seekSeconds]="settings.seekTime"
+              [canPrevious]="canSkip('prev')" [canNext]="canSkip('next')"
+              (preview)="previewSeek($event)" (seek)="seekInline($event)"
+              (previous)="onSkip('prev')" (next)="onSkip('next')"
+              (rewind)="seekRelative(-1)" (forward)="seekRelative(1)"
+              (toggle)="toggleInline()" (speedChange)="switchPlaybackSpeed()"
+              (dismiss)="clearSelection()" />
+          }
+        </ng-container>
       </cdk-virtual-scroll-viewport>
+      <app-virtual-scrollbar class="virtual-scrollbar" [virtualScrollViewport]="vsv" />
+      @if (items().length === 0) {
+        <div class="history-empty" role="status" aria-live="polite">
+          @if (initializing() || isRefreshing()) {
+            <strong>{{ isZh ? '正在读取录音…' : 'Loading recordings…' }}</strong>
+            <span>{{ isZh ? '正在建立录音列表' : 'Indexing recording files' }}</span>
+          } @else if (recordingsService.lastRefreshError()) {
+            <strong>{{ isZh ? '读取录音时发生错误' : 'Could not load recordings' }}</strong>
+            <span>{{ recordingsService.lastRefreshError() }}</span>
+            <button type="button" (click)="refreshFromToolbar()">{{ isZh ? '重试' : 'Retry' }}</button>
+          } @else if (!settings.recordingsDirectoryUri) {
+            <strong>{{ isZh ? '尚未选择录音目录' : 'Recording directory not selected' }}</strong>
+            <span>{{ isZh ? '请选择或刷新录音目录' : 'Choose or refresh the recording directory' }}</span>
+          } @else if (indexedCount() === 0) {
+            <strong>{{ isZh ? '没有录音文件' : 'No recordings yet' }}</strong>
+            <span>{{ isZh ? '新录音会在扫描后出现在这里' : 'Your recordings will appear here after a scan' }}</span>
+          } @else {
+            <strong>{{ isZh ? '没有匹配的录音' : 'No matching recordings' }}</strong>
+            <span>{{ isZh ? '调整搜索内容或通话类型筛选' : 'Try different search or call filters' }}</span>
+            <button type="button" (click)="resetFilters()">{{ isZh ? '清除筛选' : 'Clear filters' }}</button>
+          }
+        </div>
+      }
+      @if (items().length > 0 && recordingsService.lastRefreshError() && !isRefreshing()) {
+        <div class="history-scan-warning" role="status">
+          {{ isZh ? '最近一次扫描失败，当前显示已有录音' : 'Last scan failed; showing existing recordings' }}
+          <button type="button" (click)="refreshFromToolbar()">{{ isZh ? '重试' : 'Retry' }}</button>
+        </div>
+      }
+    </section>
 
-      <app-virtual-scrollbar
-        class="virtual-scrollbar"
-        [virtualScrollViewport]="vsv"
-      />
-
-    </ion-list>
-
-    <!-- audio player -->
-    @if (selectedItem() && !isMultiselect()) {
-      <app-audio-player #audioPlayer
-        class="player"
-        [recording]="selectedItem()!"
-        (onSkip)="onSkip($event)"
-      />
+    @if (selectedItem() && !isMultiselect() && !inlinePlayerVisible()) {
+      <div class="collapsed-player-dock">
+        <app-history-inline-player
+          [zh]="isZh" [position]="inlineProgress()" [duration]="inlineDuration()"
+          [playing]="inlinePlaying()" [ready]="inlineReady()" [failed]="inlineFailed()"
+          [speed]="playbackSpeed()" [seekSeconds]="settings.seekTime"
+          [canPrevious]="canSkip('prev')" [canNext]="canSkip('next')"
+          (preview)="previewSeek($event)" (seek)="seekInline($event)"
+          (previous)="onSkip('prev')" (next)="onSkip('next')"
+          (rewind)="seekRelative(-1)" (forward)="seekRelative(1)"
+          (toggle)="toggleInline()" (speedChange)="switchPlaybackSpeed()"
+          (dismiss)="clearSelection()" />
+      </div>
     }
 
+    @if (selectedItem() && !isMultiselect()) {
+      <app-history-details [recording]="selectedItem()!" [zh]="isZh"
+        [dialUri]="isDialableNumber(selectedItem()!) ? getDialUri(selectedItem()!) : null"
+        (close)="clearSelection()" (edit)="editItem(selectedItem()!)"
+        (share)="shareRecording(selectedItem()!)" (delete)="deleteItems([selectedItem()!])" />
+      <!-- One player, outside CDK. Selecting or scrolling never remounts another. -->
+      <app-audio-player #audioPlayer class="player-engine" [recording]="selectedItem()!"
+        (onSkip)="onSkip($event)" />
+    }
   </div>
-
 </ion-content>

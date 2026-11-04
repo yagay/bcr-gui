@@ -153,6 +153,18 @@
       </div>
     </ion-item>
 
+    <!-- Diagnostic logs are separate from JSON settings import. -->
+    <ion-item-divider>
+      <h4>诊断日志 / Diagnostic logs</h4>
+    </ion-item-divider>
+
+    <ion-item button (click)="exportDiagnosticReport()">
+      <div class="label">
+        <div>导出诊断日志 / Export diagnostic log</div>
+        <div class="help">一键导出历史录音扫描日志、扫描错误及数量统计，便于定位漏读问题。</div>
+      </div>
+    </ion-item>
+
     <!-- import/export -->
     <ion-item-divider>
       <h4>{{ 'SETTINGS_IMPEXP_TITLE' | translatePipe }}</h4>

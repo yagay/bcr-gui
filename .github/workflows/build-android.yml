@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - dev
+      - feature/call-log-ui
 
 permissions:
   contents: read
@@ -24,7 +25,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
 
       - name: Set up Java
@@ -37,7 +38,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Angular frontend
+      - name: Guard the one-player fixed-row GUI architecture
+        run: node scripts/check-history-gui.mjs
+
+      - name: Execute history GUI regression tests (Node 24 TypeScript)
+        run: node --experimental-strip-types --test scripts/tests/history-display-rows.test.ts
+
+      - name: Validate recording-history invariants (TypeScript)
+        run: npx tsc --noEmit --project tsconfig.history-spec.json
+
+      - name: Build recording GUI
         run: npm run build
 
       # 必须执行：把最新的 www 内容复制进 Android 工程

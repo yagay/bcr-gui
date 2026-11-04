@@ -74,6 +74,64 @@ export class SettingsPage {
     this.recordingsService.selectRecordingsDirectory(() => this.recordingsService.initialize());
   }
 
+
+  /** Share recording-index counts without exporting contacts or file paths. */
+  protected async exportDiagnosticReport(): Promise<void> {
+    const recordings = this.recordingsService.recordings();
+    const mimeCounts = new Map<string, number>();
+    const folderCounts = new Map<string, number>();
+    for (const item of recordings) {
+      const mime = item.mimeType || '(missing)';
+      const folder = item.sourceFolder || '(root)';
+      mimeCounts.set(mime, (mimeCounts.get(mime) || 0) + 1);
+      folderCounts.set(folder, (folderCounts.get(folder) || 0) + 1);
+    }
+    const report = [
+      this.recordingsService.exportScanDiagnostics(),
+      '',
+      'BCR-GUI recording index diagnostics',
+      'Generated: ' + new Date().toISOString(),
+      'Indexed recordings: ' + recordings.length,
+      'Refreshing: ' + (this.recordingsService.refreshProgress() !== undefined),
+      'Updating durations: ' + this.recordingsService.isUpdatingDurations,
+      'MIME types:',
+      ...Array.from(mimeCounts, ([mime, count]) => '  ' + mime + ': ' + count),
+      'Source folders:',
+      ...Array.from(folderCounts, ([folder, count]) => '  ' + folder + ': ' + count),
+      'Contact names, numbers, filenames, and absolute paths are omitted.',
+    ].join('\n');
+    try {
+      const output = await Filesystem.writeFile({
+        path: 'bcr-gui-diagnostic-log.txt',
+        directory: Directory.Cache,
+        encoding: Encoding.UTF8,
+        data: report,
+      });
+      // Share.files marks the payload as a local attachment instead of a URL.
+      await Share.share({
+        title: 'BCR-GUI diagnostic log',
+        files: [output.uri],
+        dialogTitle: 'Export BCR-GUI diagnostic log',
+      });
+    } catch (fileError) {
+      // On devices with a restrictive FileProvider or broken file URI grants,
+      // let the user export the diagnostics as plain text instead of losing them.
+      console.warn('Diagnostic attachment share failed; trying text sharing:', fileError);
+      try {
+        await Share.share({
+          title: 'BCR-GUI diagnostic log',
+          text: report.slice(0, 60_000),
+          dialogTitle: 'Export BCR-GUI diagnostic log (text)',
+        });
+      } catch (textError) {
+        await this.messageBoxService.showError({
+          message: '导出日志失败（文件分享和文本分享均失败）/ Diagnostic export failed.',
+          error: textError,
+        });
+      }
+    }
+  }
+
   /**
    * Import settings from an external file
    */
