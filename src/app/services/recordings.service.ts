@@ -30,6 +30,28 @@ export class RecordingsService {
   private voipDirectoryUri: string | null | undefined = undefined;
   private lastFullScan = 0;
 
+  // Bounded, privacy-safe history scan events for diagnostic exports.
+  private readonly scanEvents: string[] = [];
+  private scanCounts: Record<string, number | boolean> = {};
+  private logScan(message: string): void {
+    this.scanEvents.push(new Date().toISOString() + ' ' + message);
+    if (this.scanEvents.length > 250) this.scanEvents.shift();
+  }
+  public exportScanDiagnostics(): string {
+    return [
+      'BCR-GUI history scan log',
+      'Generated: ' + new Date().toISOString(),
+      'Indexed recordings: ' + this.recordings().length,
+      'Last completed scan: ' + (this.lastFullScan ? new Date(this.lastFullScan).toISOString() : 'none this process'),
+      'Scan counts:',
+      ...Object.entries(this.scanCounts).map(([key, value]) => '  ' + key + ': ' + value),
+      'Events:',
+      ...this.scanEvents,
+      'Private paths, filenames and contacts are omitted.',
+    ].join('\n');
+  }
+
+
   // reference to main page (if active)
   public mainPageRef?: MainPage = undefined;
 
