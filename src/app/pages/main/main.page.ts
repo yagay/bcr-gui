@@ -4,7 +4,7 @@ import { ActionButton, HeaderComponent } from 'src/app/components/header/header.
 import { VirtualScrollbarComponent } from 'src/app/components/virtual-scrollbar/virtual-scrollbar.component';
 import { LongPressDirective } from 'src/app/directives/long-press.directive';
 import { RecordingGroupsService } from 'src/app/features/recording-groups/recording-groups.service';
-import { RecordingGroupTitleComponent } from 'src/app/features/recording-groups/recording-group-title.component';
+import { HistoryRecordingRowComponent } from 'src/app/features/recording-groups/history-recording-row.component';
 import { IonicBundleModule } from 'src/app/IonicBundle.module';
 import { Recording } from 'src/app/models/recording';
 import { DatetimePipe } from 'src/app/pipes/datetime.pipe';
@@ -18,7 +18,6 @@ import { RecordingsService } from 'src/app/services/recordings.service';
 import { SettingsService } from 'src/app/services/settings.service';
 import { buildRecordingHistory, projectRecordingHistory, historyConsistency } from 'src/app/features/recording-groups/recording-history.model';
 import { sortRecordings } from 'src/app/utils/recordings-sorter';
-import { bringIntoView } from 'src/app/utils/scroll';
 import { untilTrue } from 'src/app/utils/waitForAsync';
 import { AndroidSAF } from 'src/plugins/androidsaf';
 import { ErrorCode } from 'src/plugins/bcrgui';
@@ -46,7 +45,7 @@ import version from '../../version';
     HeaderComponent,
     IonicBundleModule,
     LongPressDirective,
-    RecordingGroupTitleComponent,
+    HistoryRecordingRowComponent,
     ScrollingModule,
     ToHmsPipe,
     TranslatePipe,
@@ -65,6 +64,8 @@ export class MainPage implements AfterViewInit {
   protected isMultiselect = signal(false);
   protected isSearch = signal(false);
   protected searchValue = signal('');
+  protected isZh = /^zh\\b/i.test(navigator.language);
+  protected showAllRecordings = signal(false);
   actionButtons: ActionButton[] = [
     {
       icon: () => this.searchValue() ? 'search-circle' : 'search-circle-outline',
@@ -109,22 +110,54 @@ export class MainPage implements AfterViewInit {
   ));
 
   // filtered and grouped items collection
-  protected items = computed(() => projectRecordingHistory(
-    this.groups(),
-    this.recordingGroups,
-    this.settings.recordingsSortMode,
-    this.settings.defaultCountryPrefix,
-  ));
+  protected items = computed(() => this.showAllRecordings()
+    ? this.sortedItems()
+    : projectRecordingHistory(
+      this.groups(), this.recordingGroups, this.settings.recordingsSortMode,
+      this.settings.defaultCountryPrefix,
+    ));
   // The source count is intentionally independent of the expanded/collapsed
   // CDK rows. Grouping must never change the number of indexed recordings.
   protected indexedCount = computed(() => this.recordingsService.recordings().length);
   protected visibleCount = computed(() => this.items().length);
   protected groupCount = computed(() => this.groups().size);
   protected historyIntegrity = computed(() => historyConsistency(this.sortedItems(), this.groups()));
+  protected toggleViewMode() {
+    this.clearSelection();
+    this.recordingGroups.expandedGroupKey.set(undefined);
+    this.showAllRecordings.update(v => !v);
+    this.scrollViewport()?.scrollToIndex(0);
+    this.remeasureViewport();
+  }
+
+  protected toggleGroup(item: Recording) {
+    if (this.showAllRecordings()) return;
+    this.recordingGroups.toggle(item, this.settings.defaultCountryPrefix);
+    this.remeasureViewport();
+  }
+
+  protected onPlayRow(item: Recording) {
+    // Reuse the original single player. Do not put a player in CDK rows.
+    void this.onItemClick(item);
+  }
+
+  protected onRowClick(item: Recording) {
+    if (this.isMultiselect()) {
+      item.selected = !item.selected;
+      if (!this.getSelectedItems().length) this.isMultiselect.set(false);
+      this.cdr.markForCheck();
+      return;
+    }
+    if (!this.showAllRecordings() && this.isGroupHeader(item) && this.getGroupCount(item) > 1) {
+      this.toggleGroup(item);
+    }
+    void this.onItemClick(item);
+  }
+
 
   protected topIndex = 0; // index of top shown recording
   protected itemHeight = 78;
-  protected itemGap = 12;
+  protected itemGap = 0;
 
   private player = viewChild(AudioPlayerComponent);
   private scrollViewport = viewChild(CdkVirtualScrollViewport);
@@ -182,7 +215,7 @@ export class MainPage implements AfterViewInit {
     // older recording is intentionally absent from the collapsed display list.
     const playItem = this.sortedItems().find(i => i.audioUri === viewIntentFilename);
     if (playItem) {
-      this.recordingGroups.expand(playItem, this.settings.defaultCountryPrefix);
+      if (!this.showAllRecordings()) this.recordingGroups.expand(playItem, this.settings.defaultCountryPrefix);
       const playItemIx = this.items().findIndex(i => i === playItem);
 
       // ensure it's visible
@@ -250,7 +283,7 @@ export class MainPage implements AfterViewInit {
   }
 
   clearSelection() {
-    this.recordingsService.recordings().forEach(r => r.selected = false); // remove flag from itemsAll, just to stay safe...😉
+    this.recordingsService.recordings().forEach(r => r.selected = false);
     this.selectedItem.set(undefined);
     this.isMultiselect.set(false);
   }
@@ -288,29 +321,6 @@ export class MainPage implements AfterViewInit {
     }
   }
 
-  protected onCardClick(item: Recording) {
-    const key = this.getGroupKey(item);
-
-    if (!this.isMultiselect() && this.expandedGroupKey() !== key) {
-      this.expandedGroupKey.set(undefined);
-    }
-
-    if (!this.isMultiselect() && this.isGroupHeader(item) && this.getGroupCount(item) > 1) {
-      const isExpanded = this.expandedGroupKey() === key;
-
-      // Switching from an older recording back to the latest one must keep the
-      // history visible. Collapse only when the latest recording is already
-      // selected and the user taps the same contact again.
-      if (!isExpanded || item.selected) {
-        this.toggleExpand(key);
-      }
-
-      this.onItemClick(item);
-    }
-    else {
-      this.onItemClick(item);
-    }
-  }
 
   /**
    * Helper to check if a recording is the header of its group
@@ -355,9 +365,7 @@ export class MainPage implements AfterViewInit {
       }
       item.selected = true;
       this.selectedItem.set(item);
-      if (!this.isMultiselect()) {
-        bringIntoView('.items .selected');
-      }
+      this.remeasureViewport();
     }
 
   }
@@ -530,7 +538,7 @@ export class MainPage implements AfterViewInit {
   /**
    * Show Android share dialog to share an audio file
    */
-  async shareRecording(item: Recording, event: MouseEvent) {
+  async shareRecording(item: Recording, _event?: MouseEvent) {
 
     // stop player
     await this.stopPlayer();
@@ -601,8 +609,8 @@ Duration: ${this.toHms.transform(item.duration)}
     if (selectedItemIndex >= 0) {
       const newSelectedItem = this.sortedItems()[selectedItemIndex + (direction === 'next' ? +1 : -1)];
       if (newSelectedItem) {
-        this.recordingGroups.expand(newSelectedItem, this.settings.defaultCountryPrefix);
-        this.onItemClick(newSelectedItem);
+        if (!this.showAllRecordings()) this.recordingGroups.expand(newSelectedItem, this.settings.defaultCountryPrefix);
+        void this.onItemClick(newSelectedItem);
       }
     }
   }
