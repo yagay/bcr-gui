@@ -23,7 +23,7 @@ import { AndroidSAF } from 'src/plugins/androidsaf';
 import { ErrorCode } from 'src/plugins/bcrgui';
 import { CdkVirtualScrollViewport, ScrollingModule } from '@angular/cdk/scrolling';
 import { DatePipe } from '@angular/common';
-import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, inject, signal, viewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, effect, inject, OnDestroy, signal, untracked, viewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { Clipboard } from '@capacitor/clipboard';
 import { ActionSheetController, RefresherCustomEvent } from '@ionic/angular';
@@ -55,7 +55,7 @@ import version from '../../version';
     ToHmsPipe,
   ],
 })
-export class MainPage implements AfterViewInit {
+export class MainPage implements AfterViewInit, OnDestroy {
 
   protected version = version;
   protected isMultiselect = signal(false);
@@ -64,6 +64,8 @@ export class MainPage implements AfterViewInit {
   protected showAllRecordings = signal(false);
   protected directionFilter = signal<HistoryFilter>('all');
   private playRequestId = 0;
+  private viewportResizeObserver?: ResizeObserver;
+  private resizeFrame = 0;
   // Search and filters are controlled by the same HistoryControls toolbar.
   selectedItem = signal<Recording | undefined>(undefined);
   protected recordingGroups = inject(RecordingGroupsService);
@@ -289,16 +291,13 @@ export class MainPage implements AfterViewInit {
     protected router: Router,
     protected settings: SettingsService,
   ) {
-
-    // // DEBUG: automatically select first recording
-    // if (!environment.production) {
-    //   effect(() => {
-    //     if (this.items()?.length) {
-    //       setTimeout(() => this.onItemClick(this.items()[0]), 250);
-    //     }
-    //   });
-    // }
-
+    // An initial SAF index is populated after the viewport first renders.
+    // Recalculate CDK's rendered range when recording/group counts change,
+    // not only when a recording gets selected and the player is mounted.
+    effect(() => {
+      this.displayRows().length;
+      untracked(() => this.remeasureViewport());
+    });
   }
 
   async ionViewWillEnter() {
@@ -368,18 +367,41 @@ export class MainPage implements AfterViewInit {
   }
 
   async ngAfterViewInit() {
-    await this.recordingsService.initialize();
-    // Data arrives asynchronously after SAF scan: let CDK recalculate the
-    // viewport without changing its fixed itemSize or replacing DOM siblings.
+    // Begin observing before SAF indexing: the first Ionic page layout can
+    // complete before the recording index finishes loading.
+    const viewport = this.scrollViewport()?.elementRef.nativeElement;
+    if (viewport && typeof ResizeObserver !== 'undefined') {
+      this.viewportResizeObserver = new ResizeObserver(() => this.remeasureViewport());
+      this.viewportResizeObserver.observe(viewport);
+      const parent = viewport.parentElement;
+      if (parent) this.viewportResizeObserver.observe(parent);
+    }
     this.remeasureViewport();
+    try {
+      await this.recordingsService.initialize();
+    } finally {
+      this.cdr.markForCheck();
+      this.remeasureViewport();
+    }
   }
 
   async ionViewDidEnter() {
     this.remeasureViewport();
   }
 
+  ngOnDestroy(): void {
+    this.viewportResizeObserver?.disconnect();
+    if (this.resizeFrame) cancelAnimationFrame(this.resizeFrame);
+  }
+
   private remeasureViewport(): void {
-    requestAnimationFrame(() => this.scrollViewport()?.checkViewportSize());
+    // Coalesce Ionic transitions, initial SAF refresh and row changes into
+    // one measurement per frame. Never scroll or change row geometry here.
+    if (this.resizeFrame) cancelAnimationFrame(this.resizeFrame);
+    this.resizeFrame = requestAnimationFrame(() => {
+      this.resizeFrame = 0;
+      this.scrollViewport()?.checkViewportSize();
+    });
   }
 
   private updateSelectedCount(): void {
