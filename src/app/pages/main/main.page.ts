@@ -5,6 +5,7 @@ import { RecordingGroupsService } from 'src/app/features/recording-groups/record
 import { HistoryRecordingRowComponent } from 'src/app/features/recording-groups/history-recording-row.component';
 import { HistoryControlsComponent } from 'src/app/features/recording-groups/history-controls.component';
 import { HistoryDetailsComponent } from 'src/app/features/recording-groups/history-details.component';
+import { HistoryInlinePlayerComponent } from 'src/app/features/recording-groups/history-inline-player.component';
 import { IonicBundleModule } from 'src/app/IonicBundle.module';
 import { Recording } from 'src/app/models/recording';
 import { DatetimePipe } from 'src/app/pipes/datetime.pipe';
@@ -44,6 +45,7 @@ import version from '../../version';
     HistoryRecordingRowComponent,
     HistoryControlsComponent,
     HistoryDetailsComponent,
+    HistoryInlinePlayerComponent,
     ScrollingModule,
     ToHmsPipe,
     VirtualScrollbarComponent,
@@ -133,16 +135,14 @@ export class MainPage implements AfterViewInit, OnDestroy {
   protected inlinePlaying(): boolean { return this.player()?.playingState() === true; }
   protected inlineReady(): boolean { return this.selectedItem() !== undefined && this.player()?.isReadyFor(this.selectedItem()!) === true; }
   protected inlineFailed(): boolean { return this.player()?.failedState() === true; }
-  protected previewSeek(event: Event): void {
-    const position = Number((event.target as HTMLInputElement).value);
+  protected previewSeek(position: number): void {
     if (Number.isFinite(position)) {
       this.scrubbing.set(true);
       this.scrubPosition.set(position);
     }
   }
 
-  protected seekInline(event: Event): void {
-    const position = Number((event.target as HTMLInputElement).value);
+  protected seekInline(position: number): void {
     if (Number.isFinite(position)) void this.player()?.seekTo(position);
     this.scrubbing.set(false);
   }

@@ -46,23 +46,16 @@
               (expandedClicked)="toggleGroup(entry.recording)"
               (longPressed)="startMultiselection(entry.recording)" />
           } @else {
-            <div class="inline-playback" role="group" [attr.aria-label]="isZh ? '录音播放控制' : 'Recording playback controls'">
-              <div class="inline-timeline">
-                <span>{{ inlineProgress() | toHms }}</span>
-                <input type="range" [min]="0" [max]="inlineDuration() || 1"
-                  [value]="inlineProgress()" [disabled]="!inlineReady()"
-                  (change)="seekInline($event)" [attr.aria-label]="isZh ? '播放进度' : 'Playback position'"/>
-                <span>{{ inlineDuration() | toHms }}</span>
-              </div>
-              <div class="inline-buttons">
-                <button type="button" (click)="onSkip('prev')" [disabled]="!inlineReady()" aria-label="Previous recording">⏮</button>
-                <button type="button" (click)="toggleInline()" [disabled]="!inlineReady() && !inlineFailed()"
-                  [attr.aria-label]="inlineFailed() ? 'Retry playback' : inlinePlaying() ? 'Pause' : 'Play'">{{ inlineFailed() ? '↻' : inlinePlaying() ? 'Ⅱ' : inlineReady() ? '▶' : '…' }}</button>
-                <button type="button" (click)="onSkip('next')" [disabled]="!inlineReady()" aria-label="Next recording">⏭</button>
-                <button type="button" (click)="switchPlaybackSpeed()" [disabled]="!inlineReady()">{{ playbackSpeed() }}×</button>
-                <button type="button" (click)="clearSelection()" [attr.aria-label]="isZh ? '关闭播放器' : 'Close playback'">×</button>
-              </div>
-            </div>
+            <app-history-inline-player
+              [zh]="isZh" [position]="inlineProgress()" [duration]="inlineDuration()"
+              [playing]="inlinePlaying()" [ready]="inlineReady()" [failed]="inlineFailed()"
+              [speed]="playbackSpeed()" [seekSeconds]="settings.seekTime"
+              [canPrevious]="canSkip('prev')" [canNext]="canSkip('next')"
+              (preview)="previewSeek($event)" (seek)="seekInline($event)"
+              (previous)="onSkip('prev')" (next)="onSkip('next')"
+              (rewind)="seekRelative(-1)" (forward)="seekRelative(1)"
+              (toggle)="toggleInline()" (speedChange)="switchPlaybackSpeed()"
+              (dismiss)="clearSelection()" />
           }
         </ng-container>
       </cdk-virtual-scroll-viewport>
@@ -74,6 +67,21 @@
         </div>
       }
     </section>
+
+    @if (selectedItem() && !isMultiselect() && !inlinePlayerVisible()) {
+      <div class="collapsed-player-dock">
+        <app-history-inline-player
+          [zh]="isZh" [position]="inlineProgress()" [duration]="inlineDuration()"
+          [playing]="inlinePlaying()" [ready]="inlineReady()" [failed]="inlineFailed()"
+          [speed]="playbackSpeed()" [seekSeconds]="settings.seekTime"
+          [canPrevious]="canSkip('prev')" [canNext]="canSkip('next')"
+          (preview)="previewSeek($event)" (seek)="seekInline($event)"
+          (previous)="onSkip('prev')" (next)="onSkip('next')"
+          (rewind)="seekRelative(-1)" (forward)="seekRelative(1)"
+          (toggle)="toggleInline()" (speedChange)="switchPlaybackSpeed()"
+          (dismiss)="clearSelection()" />
+      </div>
+    }
 
     @if (selectedItem() && !isMultiselect()) {
       <app-history-details [recording]="selectedItem()!" [zh]="isZh"

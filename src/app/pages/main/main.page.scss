@@ -46,11 +46,4 @@
   align-items:center;gap:8px;text-align:center;color:var(--ion-color-step-600);font-size:13px;pointer-events:none;}
 .history-empty strong {font-size:15px;font-weight:600;}
 .player-engine {position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;}
-.inline-playback {height:78px;box-sizing:border-box;background:var(--ion-color-step-50);
-  border-bottom:1px solid var(--ion-color-step-200);padding:5px 14px 7px;display:flex;flex-direction:column;gap:3px;}
-.inline-timeline {display:flex;gap:9px;align-items:center;height:28px;font-size:11px;color:var(--ion-color-step-700);}
-.inline-timeline input {min-width:0;flex:1;accent-color:var(--ion-color-primary);height:24px;}
-.inline-buttons {height:32px;display:flex;justify-content:space-evenly;align-items:center;gap:8px;}
-.inline-buttons button {min-width:38px;height:30px;border:0;border-radius:6px;
-  background:transparent;color:var(--ion-color-primary);font-size:17px;}
-.inline-buttons button:disabled {opacity:.4;}
+.collapsed-player-dock {flex:0 0 78px;min-height:78px;border-top:1px solid var(--ion-color-step-200);}
