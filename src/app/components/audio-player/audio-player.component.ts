@@ -44,6 +44,7 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   private loadQueue: Promise<void> = Promise.resolve();
   private loadGeneration = 0;
   private loadedRecording?: Recording;
+  private nativeLoadAttempted = false;
   private destroying = false;
 
   // inputs
@@ -138,6 +139,7 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
       })).remove;
 
       if (generation !== this.loadGeneration || this.destroying) return;
+      this.nativeLoadAttempted = true;
       await AudioPlayer.load({
         fileUri: rec.audioUri,
         notificationTitle: rec.opName,
@@ -168,7 +170,11 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
     this.removePlayCompletedListener = undefined;
     this.removePlayerUpdateListener = undefined;
     await Promise.allSettled([onReady?.(), onCompleted?.(), onUpdate?.()]);
-    await AudioPlayer.unload();
+    // A fresh component has no native session to unload. This also avoids
+    // dispatching an unload before the Android service binding is available.
+    const shouldUnloadNative = this.nativeLoadAttempted;
+    this.nativeLoadAttempted = false;
+    if (shouldUnloadNative) await AudioPlayer.unload();
     if (!this.destroying) this.cdr.markForCheck();
   }
 
