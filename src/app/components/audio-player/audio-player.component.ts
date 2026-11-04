@@ -6,7 +6,7 @@ import { MessageBoxService } from 'src/app/services/message-box.service';
 import { RecordingsService } from 'src/app/services/recordings.service';
 import { SettingsService } from 'src/app/services/settings.service';
 import { AudioPlayer } from 'src/plugins/audioplayer';
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, effect, input, OnDestroy, OnInit, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, effect, input, OnDestroy, OnInit, output, signal, untracked } from '@angular/core';
 import { RangeCustomEvent } from '@ionic/angular';
 
 export enum PlayerStatusEnum {
@@ -62,24 +62,31 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
     private recordingsService: RecordingsService,
     protected settings: SettingsService,
   ) {
+    // The effect tracks ONLY the recording input. Native-player lifecycle
+    // state writes must run outside Angular 18's reactive consumer; otherwise
+    // ready/status/progress.set() throws NG0600 on every recording switch.
     effect(() => {
       const next = this.recording();
-      const generation = ++this.loadGeneration;
-      // Invalidate old callbacks immediately, before asynchronous native work.
-      this.ready.set(false);
-      this.loadedRecording = undefined;
-      this.status.set(PlayerStatusEnum.Paused);
-      this.progress.set(0);
-      this.loadQueue = this.loadQueue
-        .catch(error => this.showError(error, 'switch queue'))
-        .then(async () => {
-          if (generation !== this.loadGeneration || this.destroying) return;
-          await this.releaseCurrent();
-          if (generation !== this.loadGeneration || this.destroying) return;
-          await this.load(next, generation);
-        });
+      untracked(() => this.scheduleRecordingSwitch(next));
     });
+  }
 
+  private scheduleRecordingSwitch(next: Recording) {
+    if (this.destroying) return;
+    const generation = ++this.loadGeneration;
+    // Invalidate old callbacks synchronously before any asynchronous unload.
+    this.ready.set(false);
+    this.loadedRecording = undefined;
+    this.status.set(PlayerStatusEnum.Paused);
+    this.progress.set(0);
+    this.loadQueue = this.loadQueue
+      .catch(error => this.showError(error, 'switch queue'))
+      .then(async () => {
+        if (generation !== this.loadGeneration || this.destroying) return;
+        await this.releaseCurrent();
+        if (generation !== this.loadGeneration || this.destroying) return;
+        await this.load(next, generation);
+      });
   }
 
   async ngOnInit() {
