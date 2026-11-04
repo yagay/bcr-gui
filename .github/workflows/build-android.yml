@@ -38,6 +38,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Guard the one-player fixed-row GUI architecture
+        run: node scripts/check-history-gui.mjs
+
       - name: Validate recording-history invariants (TypeScript)
         run: npx tsc --noEmit --project tsconfig.history-spec.json
 
