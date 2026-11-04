@@ -7,8 +7,17 @@ export type HistoryFilter = 'all' | 'in' | 'out' | 'voip';
 
 /** Only recordings positively identified as VoIP should enter this filter. */
 export function isVoipRecording(item: Recording): boolean {
-  return /(^|\/)voip(\/|$)/i.test(item.sourceFolder || '') ||
-    /^bcr_\d{8}_\d{6}_(whatsapp|whatsapp-business|telegram|telegram-x|signal|viber|meet|wechat)\.wav$/i.test(item.audioDisplayName || '');
+  // BCR's VoIP folder is authoritative; subfolders preserve their identity.
+  const folder = item.sourceFolder || '';
+  const knownApp = /^(?:voip|whatsapp(?:[- ]business)?|telegram(?:[- ]x)?|signal|viber|wechat|skype|discord|meet)$/i;
+  if (folder.split(/[\\/]/).some(segment => knownApp.test(segment))) return true;
+
+  // Old imports sometimes lack a sourceFolder. Match explicit app suffixes
+  // rather than treating every WAV file (or contact with an app name) as VoIP.
+  const filename = item.audioDisplayName || '';
+  return /(?:^|[_ .-])(?:whatsapp(?:[- ]business)?|telegram(?:[- ]x)?|signal|viber|wechat|skype|discord|meet)(?:[_ .-]|$)/i
+    .test(filename.replace(/\.(?:wav|oga|ogg|m4a|aac|mp3|opus|flac)$/i, '')) &&
+    /\.(?:wav|oga|ogg|m4a|aac|mp3|opus|flac)$/i.test(filename);
 }
 
 export function filterRecordingDirection(records: Recording[], filter: HistoryFilter): Recording[] {

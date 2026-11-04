@@ -44,14 +44,15 @@ import { ToHmsPipe } from 'src/app/pipes/to-hms.pipe';
     .inline-player {height:78px;box-sizing:border-box;background:var(--ion-color-step-50);
       border-bottom:1px solid var(--ion-color-step-200);padding:5px 8px 6px;
       display:flex;flex-direction:column;gap:3px;}
-    .timeline {display:flex;gap:8px;align-items:center;height:27px;font-size:11px;color:var(--ion-color-step-700);}
+    .timeline {display:flex;gap:8px;align-items:center;height:24px;font-size:11px;color:var(--ion-color-step-700);}
     .timeline input {min-width:0;flex:1;accent-color:var(--ion-color-primary);height:25px;}
-    .buttons {height:33px;display:flex;justify-content:space-between;align-items:center;gap:3px;}
-    .buttons button {min-width:0;flex:1 1 0;height:30px;padding:0 2px;border:0;border-radius:6px;
+    .buttons {height:40px;display:flex;justify-content:space-between;align-items:center;gap:2px;}
+    .buttons button {min-width:36px;flex:1 1 0;height:40px;padding:0 2px;border:0;border-radius:6px;
       background:transparent;color:var(--ion-color-primary);font-size:13px;white-space:nowrap;}
     .buttons .toggle {font-size:20px;flex:1.2 1 0;}
     .buttons .speed {font-size:12px;}
     .buttons button:disabled {opacity:.35;}
+    @media (max-width:350px) { .inline-player {padding-inline:3px;} .buttons button {min-width:32px;font-size:11px;} }
   `]
 })
 export class HistoryInlinePlayerComponent {
