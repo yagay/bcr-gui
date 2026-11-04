@@ -42,7 +42,7 @@ assert(page.includes('(scroll)="onViewportScroll()"'), 'Off-screen playback must
 assert(controller.includes('inlineRowOnScreen('), 'Mini-player visibility must use viewport intersection');
 assert(controller.includes('focusRecording(item)'), 'Selected playback must focus the CDK row');
 assert(controller.includes('private selectedUris = signal'), 'Selection must be URI-based');
-assert(!/\\.selected\\s*=/.test(controller), 'Recording objects must not hold mutable GUI selection state');
+assert(!/\.selected\s*=/.test(controller), 'Recording objects must not hold mutable GUI selection state');
 assert(player.includes('markReadyTimeout('), 'Stalled native prepare must expose a retry state');
 assert(player.includes('transportQueue: Promise<void>'), 'Native play/pause/seek must be serialized');
 assert(controls.includes('searchDebounce'), 'Toolbar search must avoid scanning every keystroke');
