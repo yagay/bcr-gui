@@ -107,9 +107,28 @@ export class SettingsPage {
         encoding: Encoding.UTF8,
         data: report,
       });
-      await Share.share({ title: 'BCR-GUI diagnostic log', url: output.uri });
-    } catch (error) {
-      await this.messageBoxService.showError({ error });
+      // Share.files marks the payload as a local attachment instead of a URL.
+      await Share.share({
+        title: 'BCR-GUI diagnostic log',
+        files: [output.uri],
+        dialogTitle: 'Export BCR-GUI diagnostic log',
+      });
+    } catch (fileError) {
+      // On devices with a restrictive FileProvider or broken file URI grants,
+      // let the user export the diagnostics as plain text instead of losing them.
+      console.warn('Diagnostic attachment share failed; trying text sharing:', fileError);
+      try {
+        await Share.share({
+          title: 'BCR-GUI diagnostic log',
+          text: report.slice(0, 60_000),
+          dialogTitle: 'Export BCR-GUI diagnostic log (text)',
+        });
+      } catch (textError) {
+        await this.messageBoxService.showError({
+          message: '导出日志失败（文件分享和文本分享均失败）/ Diagnostic export failed.',
+          error: textError,
+        });
+      }
     }
   }
 
