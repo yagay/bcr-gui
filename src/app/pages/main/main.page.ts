@@ -62,6 +62,7 @@ export class MainPage implements AfterViewInit {
   protected searchValue = signal('');
   protected isZh = /^zh\b/i.test(navigator.language);
   protected showAllRecordings = signal(false);
+  protected directionFilter = signal<'all' | 'in' | 'out'>('all');
   private playRequestId = 0;
   actionButtons: ActionButton[] = [
     {
@@ -83,7 +84,9 @@ export class MainPage implements AfterViewInit {
   // Playback, multiselection and intent handling must keep using the full list.
   private sortedItems = computed<Recording[]>(() => {
     const sortedItems = buildRecordingHistory(
-      this.recordingsService.recordings(),
+      this.recordingsService.recordings().filter(item =>
+        this.directionFilter() === 'all' || item.direction === this.directionFilter()
+      ),
       this.searchValue(),
       this.settings.recordingsSortMode,
     );
@@ -119,6 +122,15 @@ export class MainPage implements AfterViewInit {
   protected visibleCount = computed(() => this.items().length);
   protected groupCount = computed(() => this.groups().size);
   protected historyIntegrity = computed(() => historyConsistency(this.sortedItems(), this.groups()));
+  protected setDirectionFilter(value: 'all' | 'in' | 'out'): void {
+    if (this.directionFilter() === value) return;
+    this.clearSelection();
+    this.recordingGroups.expandedGroupKey.set(undefined);
+    this.directionFilter.set(value);
+    this.scrollViewport()?.scrollToIndex(0);
+    this.remeasureViewport();
+  }
+
   protected toggleViewMode() {
     this.clearSelection();
     this.recordingGroups.expandedGroupKey.set(undefined);
