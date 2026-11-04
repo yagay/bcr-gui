@@ -45,6 +45,7 @@ export class CallDetailSheetComponent {
 
   private actions = inject(ActionSheetController);
   protected selectedUris = signal<Set<string>>(new Set());
+  private suppressClickAfterLongPress = false;
 
   protected count = computed(() => this.recordings().length);
   protected phone = computed(() => {
@@ -94,6 +95,18 @@ export class CallDetailSheetComponent {
 
   protected startSelection(recording: Recording): void {
     this.selectedUris.set(new Set([recording.audioUri]));
+    // Browsers can dispatch click after a completed long press. Without this,
+    // the same row is immediately unchecked again on pointer release.
+    this.suppressClickAfterLongPress = true;
+    setTimeout(() => this.suppressClickAfterLongPress = false, 500);
+  }
+
+  protected rowClick(recording: Recording): void {
+    if (this.suppressClickAfterLongPress) {
+      this.suppressClickAfterLongPress = false;
+      return;
+    }
+    this.toggleSelection(recording);
   }
 
   protected toggleSelection(recording: Recording): void {
