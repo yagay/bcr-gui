@@ -60,7 +60,7 @@ export class MainPage implements AfterViewInit {
   protected isMultiselect = signal(false);
   protected isSearch = signal(false);
   protected searchValue = signal('');
-  protected isZh = /^zh\\b/i.test(navigator.language);
+  protected isZh = /^zh\b/i.test(navigator.language);
   protected showAllRecordings = signal(false);
   actionButtons: ActionButton[] = [
     {
