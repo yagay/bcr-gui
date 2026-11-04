@@ -38,6 +38,15 @@ assert(layout.includes('display:flex;') || layout.includes('display:flex'),
 assert(layout.includes('flex:1 1 0;'), 'Ionic content must get remaining page height at first entry');
 assert(controller.includes('ResizeObserver'), 'Viewport must react to first-page size changes');
 assert(controller.includes('this.displayRows().length;'), 'SAF index updates must trigger CDK remeasurement');
+assert(page.includes('(scroll)="onViewportScroll()"'), 'Off-screen playback must follow real scroll position');
+assert(controller.includes('inlineRowOnScreen('), 'Mini-player visibility must use viewport intersection');
+assert(controller.includes('focusRecording(item)'), 'Selected playback must focus the CDK row');
+assert(controller.includes('private selectedUris = signal'), 'Selection must be URI-based');
+assert(!/\\.selected\\s*=/.test(controller), 'Recording objects must not hold mutable GUI selection state');
+assert(player.includes('markReadyTimeout('), 'Stalled native prepare must expose a retry state');
+assert(player.includes('transportQueue: Promise<void>'), 'Native play/pause/seek must be serialized');
+assert(controls.includes('searchDebounce'), 'Toolbar search must avoid scanning every keystroke');
+
 assert(layout.includes('--history-navigation-clearance'), 'History must reserve space for system navigation');
 assert(layout.includes('padding-bottom:var(--history-navigation-clearance)'), 'Navigation clearance must protect the list, details and collapsed mini player');
 assert(controller.includes('initializing = signal(true)'), 'Initial load state must be visible');

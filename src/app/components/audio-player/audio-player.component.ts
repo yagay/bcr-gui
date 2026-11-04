@@ -308,19 +308,13 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   /**
    * Toggle player speed
    */
-  public async toggleSpeed() {
-    switch (this.settings.playbackSpeed) {
-      case 1:
-        this.settings.playbackSpeed = 1.5;
-        break;
-      case 1.5:
-        this.settings.playbackSpeed = 2;
-        break;
-      case 2:
-        this.settings.playbackSpeed = 1;
-        break;
-    }
-    await AudioPlayer.setPlaybackSpeed({ playbackSpeed: this.settings.playbackSpeed });
+  public async toggleSpeed(): Promise<void> {
+    const oldSpeed = this.settings.playbackSpeed;
+    const nextSpeed = oldSpeed === 1 ? 1.5 : oldSpeed === 1.5 ? 2 : 1;
+    await this.enqueueTransport(async () => {
+      await AudioPlayer.setPlaybackSpeed({ playbackSpeed: nextSpeed });
+    });
+    this.settings.playbackSpeed = nextSpeed;
     await this.settings.save();
   }
 

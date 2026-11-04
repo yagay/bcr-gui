@@ -73,3 +73,27 @@ Group header taps only expand or collapse. The header's dedicated play button
 plays the representative recording. In multiselect mode, group headers select
 the full group and children select themselves. Invert/deselect-all act on the
 complete filtered source list, independent of CDK viewport rendering.
+
+## Final call-history interaction pass
+
+- The player is a fixed 78px CDK row when fully visible, or a matching
+  78px dock when outside the actual measured viewport. `scrollTop` and
+  `viewportHeight` drive this, not mere membership in the filtered array.
+- Previous/next playback centers the target history row through the CDK
+  viewport (with the existing 3-second previous-to-start behavior).
+- Multi-select tracks **audioUri** in an immutable Set; group header selection
+  is tri-state, subrows select just their recording, invert affects the full
+  filtered index, and stale Recording.selected mutation is not used.
+- A native player that never becomes ready after 12 seconds is marked
+  retryable. Loading, play/pause, seeking, and speed changes share a serial
+  transport queue with generation checks; native load/unload remains serial.
+- The search, sort and direction filters use a compact two-row toolbar, with
+  debounced text input. Short phone screens can horizontally scroll filters.
+- Row dates show Today/Yesterday according to device local calendar, then
+  absolute date/time using the user's 12/24 hour setting.
+- VoIP detection uses the explicit BCR folder first, then well-defined
+  app markers across audio formats (without claiming all .wav files are VoIP).
+- Regression checks cover 29-record completeness, viewport/dock transitions,
+  contact selection, dates, and VoIP classification. Angular and APK builds
+  still run in Actions; actual device scroll, gesture and audio behavior needs
+  on-device validation.
