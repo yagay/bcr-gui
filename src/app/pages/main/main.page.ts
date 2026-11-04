@@ -62,6 +62,7 @@ export class MainPage implements AfterViewInit {
   protected searchValue = signal('');
   protected isZh = /^zh\b/i.test(navigator.language);
   protected showAllRecordings = signal(false);
+  private playRequestId = 0;
   actionButtons: ActionButton[] = [
     {
       icon: () => this.searchValue() ? 'search-circle' : 'search-circle-outline',
@@ -133,8 +134,46 @@ export class MainPage implements AfterViewInit {
   }
 
   protected onPlayRow(item: Recording) {
-    // Reuse the original single player. Do not put a player in CDK rows.
-    void this.onItemClick(item);
+    if (this.isMultiselect()) return;
+    void this.selectAndPlay(item);
+  }
+
+  /**
+   * The latest requested recording wins. A native player is shared across
+   * every row; never try to play while the previous file is still loaded.
+   */
+  private async selectAndPlay(item: Recording): Promise<void> {
+    if (this.selectedItem() === item && this.player()?.isReadyFor(item)) {
+      ++this.playRequestId;
+      await this.player()?.togglePlayPause();
+      return;
+    }
+    const request = ++this.playRequestId;
+    this.selectRecording(item);
+    this.cdr.detectChanges();
+    this.remeasureViewport();
+    try {
+      await untilTrue(
+        () => request !== this.playRequestId ||
+          (this.selectedItem() === item && this.player()?.isReadyFor(item) === true),
+        75, 12000,
+      );
+      if (request === this.playRequestId && this.selectedItem() === item) {
+        await this.player()?.play();
+      }
+    } catch (error) {
+      if (request === this.playRequestId && this.selectedItem() === item) {
+        this.mbs.showError({ error });
+      }
+    }
+  }
+
+  private selectRecording(item: Recording): void {
+    this.recordingsService.recordings().forEach(r => r.selected = false);
+    item.selected = true;
+    this.selectedItem.set(item);
+    this.isMultiselect.set(false);
+    this.cdr.markForCheck();
   }
 
   protected onRowClick(item: Recording) {
@@ -147,7 +186,14 @@ export class MainPage implements AfterViewInit {
     if (!this.showAllRecordings() && this.isGroupHeader(item) && this.getGroupCount(item) > 1) {
       this.toggleGroup(item);
     }
-    void this.onItemClick(item);
+    if (this.selectedItem() === item) {
+      this.clearSelection();
+    } else {
+      ++this.playRequestId;
+      this.selectRecording(item);
+      this.cdr.detectChanges();
+      this.remeasureViewport();
+    }
   }
 
 
@@ -217,17 +263,12 @@ export class MainPage implements AfterViewInit {
       // ensure it's visible
       this.scrollViewport()?.scrollToIndex(playItemIx);
 
-      // select & play it (need to wait for player initialization)
-      playItem.selected = true;
-      this.selectedItem.set(playItem);
-      this.cdr.detectChanges(); // forcibly detect the .selected change above
-      await untilTrue(() => this.player()?.recording() === playItem && this.player()!.isReady());
-      this.player()?.play();
+      await this.selectAndPlay(playItem);
 
     }
     else if (!forceListRefresh) {
       // retry forcing list refresh
-      this.playIntentFile(viewIntentFilename, true);
+      await this.playIntentFile(viewIntentFilename, true);
     }
     else {
       // error
@@ -279,9 +320,11 @@ export class MainPage implements AfterViewInit {
   }
 
   clearSelection() {
+    ++this.playRequestId;
     this.recordingsService.recordings().forEach(r => r.selected = false);
     this.selectedItem.set(undefined);
     this.isMultiselect.set(false);
+    this.cdr.markForCheck();
   }
 
   getSelectedItems(): Recording[] {
@@ -345,25 +388,7 @@ export class MainPage implements AfterViewInit {
    * Change selected status
    */
   async onItemClick(item: Recording) {
-
-    if (item.selected) {
-      this.selectedItem.set(undefined);
-      // if (this.isMultiselect()) {
-        item.selected = false;
-      // disable multiselection if no element is still selected
-      if (this.isMultiselect() && !this.getSelectedItems().length) {
-        this.isMultiselect.set(false);
-      }
-    }
-    else {
-      if (!this.isMultiselect()) {
-        this.clearSelection();
-      }
-      item.selected = true;
-      this.selectedItem.set(item);
-      this.remeasureViewport();
-    }
-
+    await this.selectAndPlay(item);
   }
 
   /**
@@ -579,6 +604,7 @@ Duration: ${this.toHms.transform(item.duration)}
       if (item) {
         item.selected = true;
       }
+      this.cdr.markForCheck();
     }
   }
 
@@ -600,13 +626,13 @@ Duration: ${this.toHms.transform(item.duration)}
    * Skip to previous/next item
    */
   protected onSkip(direction: SkipDirection) {
-    // find first selected item index
-    const selectedItemIndex = this.sortedItems().findIndex(i => i.selected);
+    // Navigate the complete filtered history, never only collapsed summaries.
+    const selectedItemIndex = this.sortedItems().findIndex(i => i === this.selectedItem());
     if (selectedItemIndex >= 0) {
       const newSelectedItem = this.sortedItems()[selectedItemIndex + (direction === 'next' ? +1 : -1)];
       if (newSelectedItem) {
         if (!this.showAllRecordings()) this.recordingGroups.expand(newSelectedItem, this.settings.defaultCountryPrefix);
-        void this.onItemClick(newSelectedItem);
+        void this.selectAndPlay(newSelectedItem);
       }
     }
   }
