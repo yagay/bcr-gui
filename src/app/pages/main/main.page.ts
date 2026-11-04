@@ -68,6 +68,7 @@ export class MainPage implements AfterViewInit {
   protected isSearch = signal(false);
   protected searchValue = signal('');
   protected callFilter = signal<CallFilter>('all');
+  protected showEachRecording = signal(false);
   protected detailGroupKey = signal<string | undefined>(undefined);
   protected playerExpanded = signal(false);
   // Latest tap wins: stale readiness polls must never play the old recording.
@@ -140,16 +141,27 @@ export class MainPage implements AfterViewInit {
 
   // A fixed-height virtual list contains ONE summary per contact/number.
   // Group history lives in a separate sheet: expanding never alters row height.
-  protected items = computed(() => sortRecordings(
-    Array.from(this.groups().values(), group => group[0]),
-    this.settings.recordingsSortMode,
-  ));
+  protected items = computed(() => this.showEachRecording()
+    ? this.sortedItems()
+    : sortRecordings(
+      Array.from(this.groups().values(), group => group[0]),
+      this.settings.recordingsSortMode,
+    )
+  );
   // An extra fixed-height virtual item appears immediately below the call
   // whose playback button was pressed. No row changes its height on expansion.
   protected virtualItems = computed<CallHistoryRow[]>(() => buildCallHistoryRows(
     this.items(), this.selectedItem(), this.playerExpanded(),
-    item => this.getGroupKey(item),
+    item => this.showEachRecording() ? item.audioUri : this.getGroupKey(item),
   ));
+  protected totalRecordingCount = computed(() => this.recordingsService.recordings().length);
+  protected filteredRecordingCount = computed(() => this.sortedItems().length);
+  protected groupCount = computed(() => this.groups().size);
+  protected toggleRecordView() {
+    this.clearSelection();
+    this.showEachRecording.update(value => !value);
+    this.scrollViewport()?.scrollToIndex(0);
+  }
   protected detailRecords = computed(() => {
     const key = this.detailGroupKey();
     return key ? (this.groups().get(key) ?? []) : [];
