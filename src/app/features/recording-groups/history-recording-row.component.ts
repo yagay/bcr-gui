@@ -11,9 +11,9 @@ import { LongPressDirective } from 'src/app/directives/long-press.directive';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="history-entry" [class.is-child]="!isHeader()" [class.is-selected]="selected()"
-      [class.is-multiselect]="multiselect()" longPress (longPress)="longPressed.emit()"
-      (click)="opened.emit()" role="button" tabindex="0"
-      (keydown.enter)="opened.emit()" (keydown.space)="opened.emit(); $event.preventDefault()">
+      [class.is-multiselect]="multiselect()" longPress (longPress)="onLongPress()"
+      (click)="onOpen()" role="button" tabindex="0"
+      (keydown.enter)="onOpen()" (keydown.space)="onOpen(); $event.preventDefault()">
       <div class="avatar"><span>{{ avatarLetter() }}</span></div>
       <div class="entry-body">
         <div class="entry-heading">
@@ -41,8 +41,8 @@ import { LongPressDirective } from 'src/app/directives/long-press.directive';
           </button>
         }
         <button class="play" type="button" (click)="playClicked.emit(); $event.stopPropagation()"
-          [attr.aria-label]="zh() ? '选择录音' : 'Select recording'">
-          <span>▶</span>
+          [attr.aria-label]="zh() ? '查看录音' : 'Recording details'">
+          <span>⋯</span>
         </button>
       }
     </div>
@@ -85,6 +85,22 @@ export class HistoryRecordingRowComponent {
   readonly playClicked = output<void>();
   readonly expandedClicked = output<void>();
   readonly longPressed = output<void>();
+
+  private suppressClick = false;
+
+  protected onLongPress(): void {
+    this.suppressClick = true;
+    this.longPressed.emit();
+    setTimeout(() => this.suppressClick = false, 550);
+  }
+
+  protected onOpen(): void {
+    if (this.suppressClick) {
+      this.suppressClick = false;
+      return;
+    }
+    this.opened.emit();
+  }
 
   protected avatarLetter(): string {
     const r = this.recording();
