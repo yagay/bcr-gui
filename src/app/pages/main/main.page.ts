@@ -68,6 +68,9 @@ export class MainPage implements AfterViewInit {
   protected callFilter = signal<CallFilter>('all');
   protected detailGroupKey = signal<string | undefined>(undefined);
   protected playerExpanded = signal(false);
+  // Latest tap wins: stale readiness polls must never play the old recording.
+  private playbackRequestId = 0;
+  private pendingPlayback?: Recording;
   protected filterLabels = [
     { key: 'all' as const, zh: '全部', en: 'All' },
     { key: 'in' as const, zh: '来电', en: 'Incoming' },
@@ -221,15 +224,8 @@ export class MainPage implements AfterViewInit {
       // ensure it's visible
       if (playItemIx >= 0) this.scrollViewport()?.scrollToIndex(playItemIx);
 
-      // select & play it (need to wait for player initialization)
-      playItem.selected = true;
-      this.selectedItem.set(playItem);
-      // Show inline progress under the caller's summary row for VIEW intents.
-      this.playerExpanded.set(true);
-      this.cdr.detectChanges(); // ensure persistent player and inline controls exist
-      this.scrollViewport()?.checkViewportSize();
-      await untilTrue(() => this.player()?.recording() === playItem && this.player()!.isReady());
-      await this.player()?.play();
+      // Route VIEW intents through the same guarded switch path as row Play.
+      await this.playFromDetails(playItem, true);
 
     }
     else if (!forceListRefresh) {
@@ -271,7 +267,11 @@ export class MainPage implements AfterViewInit {
   }
 
   clearSelection() {
-    this.recordingsService.recordings().forEach(r => r.selected = false); // remove flag from itemsAll, just to stay safe...😉
+    // Cancel any pending play-before-ready request as well as the visual row.
+    ++this.playbackRequestId;
+    this.pendingPlayback = undefined;
+    this.playerExpanded.set(false);
+    this.recordingsService.recordings().forEach(r => r.selected = false);
     this.selectedItem.set(undefined);
     this.isMultiselect.set(false);
   }
@@ -353,26 +353,50 @@ export class MainPage implements AfterViewInit {
     this.detailGroupKey.set(undefined);
   }
 
-  protected async playFromDetails(item: Recording) {
+  protected async playFromDetails(item: Recording, forcePlay = false) {
     this.closeDetails();
-    const sameRecording = this.selectedItem() === item;
-    if (!sameRecording) await this.onItemClick(item);
-    // The inline seek controller is placed directly AFTER the clicked call
-    // in the fixed-size CDK virtual list, not at the bottom of the screen.
+
+    // Double tapping while the same file is still preparing should not launch
+    // two plays or cancel its one pending request.
+    if (this.pendingPlayback === item) return;
+
+    const current = this.selectedItem() === item;
+    const currentPlayer = this.player();
+    if (current && currentPlayer?.isReadyFor(item)) {
+      this.playerExpanded.set(true);
+      ++this.playbackRequestId;
+      if (forcePlay) await currentPlayer.play();
+      else await currentPlayer.togglePlayPause();
+      return;
+    }
+
+    if (!current) {
+      // Change selection synchronously; a single AudioPlayerComponent is kept
+      // mounted and its native load/unload queue handles the actual switch.
+      this.clearSelection();
+      item.selected = true;
+      this.selectedItem.set(item);
+    }
+
+    const request = ++this.playbackRequestId;
+    this.pendingPlayback = item;
     this.playerExpanded.set(true);
     this.cdr.detectChanges();
-    // The additional 86px CDK row must be remeasured as an actual item
-    // before the next recording can occupy its scroll coordinates.
     this.scrollViewport()?.checkViewportSize();
+
     try {
+      // A subsequent tap cancels this wait without generating a timeout alert.
       await untilTrue(
-        () => this.player()?.recording() === item && this.player()!.isReady(),
-        100, 8000,
+        () => request !== this.playbackRequestId ||
+          (this.selectedItem() === item && this.player()?.isReadyFor(item) === true),
+        75, 12000,
       );
-      if (sameRecording) await this.player()?.togglePlayPause();
-      else await this.player()?.play();
+      if (request !== this.playbackRequestId || this.selectedItem() !== item) return;
+      await this.player()?.play();
     } catch (error) {
-      this.mbs.showError({ error });
+      if (request === this.playbackRequestId) this.mbs.showError({ error });
+    } finally {
+      if (request === this.playbackRequestId) this.pendingPlayback = undefined;
     }
   }
 
@@ -389,10 +413,10 @@ export class MainPage implements AfterViewInit {
   }
 
   protected closePlayer() {
+    ++this.playbackRequestId;
+    this.pendingPlayback = undefined;
     void this.player()?.pause();
-    this.selectedItem.set(undefined);
-    this.recordingsService.recordings().forEach(r => r.selected = false);
-    this.playerExpanded.set(false);
+    this.clearSelection();
   }
 
   /** Toggle expansion for a contact group. */
@@ -688,6 +712,8 @@ Duration: ${this.toHms.transform(item.duration)}
    * Stop player (if it exists)
    */
   private async stopPlayer() {
+    ++this.playbackRequestId;
+    this.pendingPlayback = undefined;
     await this.player()?.pause();
   }
 
@@ -700,7 +726,7 @@ Duration: ${this.toHms.transform(item.duration)}
     if (selectedItemIndex >= 0) {
       const newSelectedItem = this.sortedItems()[selectedItemIndex + (direction === 'next' ? +1 : -1)];
       if (newSelectedItem) {
-        this.onItemClick(newSelectedItem);
+        void this.playFromDetails(newSelectedItem, true);
       }
     }
   }
