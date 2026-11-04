@@ -41,8 +41,8 @@ import { LongPressDirective } from 'src/app/directives/long-press.directive';
           </button>
         }
         <button class="play" type="button" (click)="playClicked.emit(); $event.stopPropagation()"
-          [attr.aria-label]="zh() ? '查看录音' : 'Recording details'">
-          <span>⋯</span>
+          [attr.aria-label]="playing() ? (zh() ? '暂停' : 'Pause') : (zh() ? '播放' : 'Play')">
+          <span>{{ playing() ? 'Ⅱ' : '▶' }}</span>
         </button>
       }
     </div>
@@ -68,6 +68,7 @@ import { LongPressDirective } from 'src/app/directives/long-press.directive';
     button {border:0;background:transparent;color:var(--ion-color-primary);cursor:pointer;
       flex:0 0 32px;display:grid;place-items:center;height:42px;padding:0;font-size:22px;}
     .expand {color:var(--ion-color-step-550);}
+    .play {font-size:21px;}
     .selection-indicator {height:22px;width:22px;flex:0 0 22px;border:2px solid var(--ion-color-step-500);
       border-radius:6px;display:grid;place-items:center;font-size:14px;}
     .selection-indicator.checked {background:var(--ion-color-primary);color:var(--ion-color-primary-contrast);border-color:var(--ion-color-primary);}
@@ -79,6 +80,7 @@ export class HistoryRecordingRowComponent {
   readonly groupCount = input(1);
   readonly expanded = input(false);
   readonly selected = input(false);
+  readonly playing = input(false);
   readonly multiselect = input(false);
   readonly zh = input(false);
   readonly opened = output<void>();
