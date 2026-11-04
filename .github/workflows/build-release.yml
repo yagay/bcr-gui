@@ -1,10 +1,9 @@
 name: Build Android Release APK
 
+# Release builds are opt-in only. Never build Release on routine pushes.
+# Current development branches build only Debug APKs.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - dev
 
 permissions:
   contents: write
