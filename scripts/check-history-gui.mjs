@@ -17,7 +17,12 @@ assert(page.includes('[itemSize]="itemHeight"'), 'CDK must use the fixed model r
 assert(controller.includes('protected itemHeight = 78;'), 'The controller row height has changed');
 assert(row.includes('height:78px'), 'The row height no longer matches CDK itemSize');
 assert(page.includes("entry.kind === 'recording'"), 'Missing fixed-size inline player row');
-assert(page.includes('class="inline-playback"'), 'Missing inline timeline');
+assert(page.includes('<app-history-inline-player'), 'Missing shared inline player view');
+const inline = read('src/app/features/recording-groups/history-inline-player.component.ts');
+assert(inline.includes('height:78px'), 'Inline player height must match virtual rows');
+assert(inline.includes('rewind = output') && inline.includes('forward = output'),
+  'Inline player must support rewind and fast-forward');
+assert(page.includes('collapsed-player-dock'), 'Collapsed contacts must retain playback controls');
 assert(controller.includes('buildDisplayRows('), 'View must use the unified row projection');
 assert(page.includes('<app-history-controls'), 'Filter controls must be independent');
 assert(page.includes('<app-history-details'), 'Recording details must stay outside the viewport');
@@ -35,4 +40,8 @@ assert(controller.includes('ResizeObserver'), 'Viewport must react to first-page
 assert(controller.includes('this.displayRows().length;'), 'SAF index updates must trigger CDK remeasurement');
 assert(layout.includes('--history-navigation-clearance'), 'History must reserve space for system navigation');
 assert(layout.includes('padding-bottom: var(--history-navigation-clearance)'), 'Navigation clearance must belong to the scroll viewport region');
+assert(controller.includes('initializing = signal(true)'), 'Initial load state must be visible');
+assert(page.includes('recordingsService.lastRefreshError()'), 'Scan failure must have a recovery state');
+assert(page.includes('(click)="invertSelection()"'), 'Bulk operations require invert selection');
+assert(page.includes('(click)="deselectAll()"'), 'Bulk operations require deselect all');
 console.log('Recording GUI architecture checks passed.');
