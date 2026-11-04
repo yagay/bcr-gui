@@ -1,0 +1,19 @@
+:host { display: block; height: 86px; }
+.call-inline-player {
+  box-sizing: border-box;
+  height: 86px;
+  border-bottom: 1px solid var(--ion-color-step-150);
+  background: var(--ion-color-step-50);
+  padding: 0 14px 5px 60px;
+}
+.seek-row { display: flex; align-items: center; gap: 7px; height: 41px; }
+.seek-row ion-range { min-width: 0; flex: 1; --bar-height: 4px; --knob-size: 17px; }
+.time { font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ion-color-step-650); }
+.actions { display: flex; align-items: center; gap: 8px; height: 36px; }
+.actions button {
+  min-width: 34px; height: 34px; border: 0;
+  background: transparent; color: var(--ion-color-primary);
+  font-size: 18px;
+}
+.actions button:disabled { opacity: .4; }
+.spacer { flex: 1; }
