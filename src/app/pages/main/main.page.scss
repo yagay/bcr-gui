@@ -69,7 +69,6 @@
 .mini-player {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 42px 42px;
-  grid-template-rows: auto 19px;
   align-items: center;
   border-top: 1px solid var(--ion-color-step-200);
   min-height: 64px;
@@ -88,23 +87,27 @@
 .mini-action { width: 42px; height: 42px; font-size: 24px; }
 .mini-action:disabled { opacity: .4; }
 .mini-progress-button {
-  display: flex; align-items: center; gap: 8px;
   grid-column: 1 / -1;
-  border: 0; padding: 0 5px; min-height: 19px;
-  color: var(--ion-color-step-600); background: transparent;
-  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
 }
 .mini-progress-track {
-  display: block; flex: 1 1 auto; height: 4px;
-  border-radius: 3px; background: var(--ion-color-step-250); overflow: hidden;
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--ion-color-step-250);
+  overflow: hidden;
 }
 .mini-progress-fill {
-  display: block; height: 100%; border-radius: inherit;
-  background: var(--ion-color-primary); transition: width .15s linear;
+  display: block;
+  height: 100%;
+  background: var(--ion-color-primary);
 }
-.mini-progress-times {
-  flex: none; font-size: 10px; font-variant-numeric: tabular-nums;
-}
+.mini-progress-times { font-size: 10px; }
 .player-panel { min-height: 0; max-height: 240px; overflow: auto; }
 .player-panel.collapsed { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
 .player { display: block; padding: 8px 12px; background: var(--player-background-color); }
