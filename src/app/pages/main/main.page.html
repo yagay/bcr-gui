@@ -56,7 +56,8 @@
               </div>
               <div class="inline-buttons">
                 <button type="button" (click)="onSkip('prev')" [disabled]="!inlineReady()" aria-label="Previous recording">⏮</button>
-                <button type="button" (click)="toggleInline()" [disabled]="!inlineReady()" [attr.aria-label]="inlinePlaying() ? 'Pause' : 'Play'">{{ inlinePlaying() ? 'Ⅱ' : '▶' }}</button>
+                <button type="button" (click)="toggleInline()" [disabled]="!inlineReady() && !inlineFailed()"
+                  [attr.aria-label]="inlineFailed() ? 'Retry playback' : inlinePlaying() ? 'Pause' : 'Play'">{{ inlineFailed() ? '↻' : inlinePlaying() ? 'Ⅱ' : inlineReady() ? '▶' : '…' }}</button>
                 <button type="button" (click)="onSkip('next')" [disabled]="!inlineReady()" aria-label="Next recording">⏭</button>
                 <button type="button" (click)="switchPlaybackSpeed()" [disabled]="!inlineReady()">{{ playbackSpeed() }}×</button>
                 <button type="button" (click)="clearSelection()" [attr.aria-label]="isZh ? '关闭播放器' : 'Close playback'">×</button>

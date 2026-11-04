@@ -36,3 +36,19 @@ Run `npm run build` and `node scripts/check-history-gui.mjs`; CI additionally
 type-checks history regression tests and assembles Android arm64 debug.
 
 A passing CI validates compilation and invariants, not physical device audio.
+
+## Fixed-height inline playback
+
+Every virtual row is 78px; playback inserts an extra `kind: 'player'` row
+immediately after the selected recording and never changes another row's
+height. The only audio engine remains `AudioPlayerComponent` outside the
+virtual viewport, visually hidden so the new inline UI is its sole controller.
+An item whose player preparation failed displays a retry control.
+
+The HistoryControls toolbar owns search, direction, sorting, view mode, refresh,
+and reset. A group header has tri-state selection, while an expanded child
+always selects just its own file.
+
+The CI workflow runs actual node:test tests using Node 24's built-in
+TypeScript stripping and also type-checks Angular/Jasmine regression sources.
+The Android APK still requires successful CI and device-level playback checks.

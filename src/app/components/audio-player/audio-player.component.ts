@@ -46,6 +46,8 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   private loadedRecording?: Recording;
   private nativeLoadAttempted = false;
   private destroying = false;
+  private loadFailed = signal(false);
+  public readonly failedState = this.loadFailed.asReadonly();
 
   // inputs
   public recording = input.required<Recording>();
@@ -74,6 +76,7 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   private scheduleRecordingSwitch(next: Recording) {
     if (this.destroying) return;
     const generation = ++this.loadGeneration;
+    this.loadFailed.set(false);
     // Invalidate old callbacks synchronously before any asynchronous unload.
     this.ready.set(false);
     this.loadedRecording = undefined;
@@ -130,6 +133,7 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
         this.status.set(PlayerStatusEnum.Paused);
         this.progress.set(0);
         this.ready.set(true);
+        this.loadFailed.set(false);
         this.cdr.markForCheck();
       })).remove;
 
@@ -161,6 +165,8 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
       if (generation === this.loadGeneration && !this.destroying) {
         this.ready.set(false);
         this.loadedRecording = undefined;
+        this.loadFailed.set(true);
+        this.cdr.markForCheck();
         this.showError(error, 'load()');
       }
     }
@@ -203,6 +209,9 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
    * Test if the player is ready to play
    */
   public isReady() { return this.ready(); }
+  public retryFailed(): void {
+    if (!this.destroying && this.loadFailed()) this.scheduleRecordingSwitch(this.recording());
+  }
   /** Loading the previous file never counts as readiness for a newly selected one. */
   public isReadyFor(recording: Recording) {
     return this.ready() && this.loadedRecording === recording;

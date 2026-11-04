@@ -127,6 +127,7 @@ export class MainPage implements AfterViewInit {
   protected inlineDuration(): number { return this.player()?.totalDuration() ?? this.selectedItem()?.duration ?? 0; }
   protected inlinePlaying(): boolean { return this.player()?.playingState() === true; }
   protected inlineReady(): boolean { return this.selectedItem() !== undefined && this.player()?.isReadyFor(this.selectedItem()!) === true; }
+  protected inlineFailed(): boolean { return this.player()?.failedState() === true; }
   protected seekInline(event: Event): void {
     const position = Number((event.target as HTMLInputElement).value);
     if (Number.isFinite(position)) void this.player()?.seekTo(position);
@@ -193,8 +194,10 @@ export class MainPage implements AfterViewInit {
       return;
     }
     const request = ++this.playRequestId;
+    const retry = this.selectedItem() === item && this.player()?.failedState() === true;
     this.selectRecording(item);
     this.cdr.detectChanges();
+    if (retry) this.player()?.retryFailed();
     this.remeasureViewport();
     try {
       await untilTrue(
