@@ -132,7 +132,7 @@ export class Recording {
     this.direction = metadata.direction ?? '';
     this.simSlot = metadata.sim_slot ?? 0;
     this.duration = Math.round(metadata.output?.recording?.duration_secs_total ?? 0);
-    if (metadata.timestamp_unix_ms) {
+    if (metadata.timestamp_unix_ms && Number.isFinite(metadata.timestamp_unix_ms)) {
       this.date = metadata.timestamp_unix_ms;
     }
 
@@ -163,15 +163,14 @@ export class Recording {
    */
   private static async loadJSONMetadata(metadataFile: IDocumentFile): Promise<Partial<BcrRecordingMetadata>|undefined> {
 
-    const { content: metadataFileContent } = await AndroidSAF.readFile({
-      fileUri: metadataFile.uri,
-      encoding: Encoding.UTF8,
-    });
     try {
-      return JSON.parse(metadataFileContent);
-    }
-    catch (error) {
-      console.error(error);
+      const { content } = await AndroidSAF.readFile({
+        fileUri: metadataFile.uri,
+        encoding: Encoding.UTF8,
+      });
+      return JSON.parse(content);
+    } catch (error) {
+      console.warn('Invalid or unreadable recording metadata:', metadataFile.displayName, error);
       return undefined;
     }
 
@@ -195,7 +194,7 @@ export class Recording {
 
     // extract recording date
     try {
-      let year = groups['date_year'] ?? ('20' + groups['date_year2']);
+      let year = groups['date_year'] ?? (groups['date_year2'] ? '20' + groups['date_year2'] : undefined);
       let month = groups['date_month'];
       let day = groups['date_day'];
       let hours = groups['date_hours'];
