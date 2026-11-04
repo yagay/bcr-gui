@@ -1,0 +1,78 @@
+<ion-content class="detail-content" [scrollY]="true">
+  <div class="contact-header">
+    <div class="contact-avatar"><ion-icon name="person-outline" /></div>
+    <div class="contact-details">
+      <h2>{{ title() }}</h2>
+      @if (phone() && title() !== phone()) {
+        <a class="contact-number" [href]="'tel:' + phone()">{{ phone() }}</a>
+      }
+      <p>{{ count() }} {{ text('条录音', 'recordings') }}
+        @if (recordings().length) {
+          · {{ text('最近', 'Latest') }}：{{ day(recordings()[0].date) }}
+        }
+      </p>
+    </div>
+    <button class="header-close" type="button" (click)="close.emit()"
+      [attr.aria-label]="text('关闭', 'Close')">
+      <ion-icon name="close-outline" />
+    </button>
+  </div>
+
+  <div class="history-list">
+    @for (entry of recordings(); track entry.audioUri; let index = $index) {
+      @if (newDay(index)) {
+        <div class="history-day">{{ day(entry.date) }}</div>
+      }
+      <div class="recording-row" [class.picked]="isSelected(entry)"
+        longPress (longPress)="startSelection(entry)"
+        (click)="toggleSelection(entry)">
+        <app-call-icon class="call-direction" [direction]="entry.direction" />
+        <div class="recording-info">
+          <div class="recording-clock">{{ clock(entry.date) }}</div>
+          <div class="recording-meta">
+            {{ direction(entry) }} · {{ entry.duration | toHms }} · {{ entry.filesize | filesize }}
+          </div>
+        </div>
+        @if (selectedUris().size) {
+          <ion-icon class="picked-icon" [name]="isSelected(entry) ? 'checkbox' : 'square-outline'" />
+        } @else {
+          <button type="button" class="row-action" (click)="play.emit(entry); $event.stopPropagation()"
+            [attr.aria-label]="text('播放', 'Play')">
+            <ion-icon [name]="playingRecording() === entry && playing()
+              ? 'pause-circle-outline' : 'play-circle-outline'" />
+          </button>
+          <button type="button" class="row-action more"
+            (click)="showActions(entry); $event.stopPropagation()"
+            [attr.aria-label]="text('更多操作', 'More actions')">
+            <ion-icon name="ellipsis-vertical" />
+          </button>
+        }
+      </div>
+      @if (showProgress() && playingRecording() === entry && !selectedUris().size) {
+        <app-call-inline-player
+          [currentPosition]="position()" [duration]="duration()"
+          [ready]="ready()" [playing]="playing()" [speed]="speed()"
+          (playPause)="playPause.emit()" (seek)="seek.emit($event)"
+          (changeSpeed)="changeSpeed.emit()" (close)="closeProgress.emit()" />
+      }
+    } @empty {
+      <p class="empty-history">{{ text('暂无录音', 'No recordings yet') }}</p>
+    }
+  </div>
+</ion-content>
+@if (selectedUris().size) {
+  <ion-footer>
+    <ion-toolbar>
+      <ion-buttons slot="start">
+        <ion-button (click)="clearSelection()">{{ text('取消', 'Cancel') }}</ion-button>
+      </ion-buttons>
+      <ion-title size="small">{{ selectedUris().size }} {{ text('条已选', 'selected') }}</ion-title>
+      <ion-buttons slot="end">
+        <ion-button color="danger" (click)="deleteSelected()">
+          <ion-icon name="trash-outline" slot="start" />
+          {{ text('删除', 'Delete') }}
+        </ion-button>
+      </ion-buttons>
+    </ion-toolbar>
+  </ion-footer>
+}
