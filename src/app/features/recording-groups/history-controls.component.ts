@@ -31,9 +31,23 @@ export type HistoryDirection = 'all' | 'in' | 'out' | 'voip';
         }
       </nav>
       <div class="summary-actions">
+        <button type="button" class="refresh" [disabled]="refreshing()"
+          (click)="refresh.emit()" [attr.aria-label]="i18n.get('HISTORY_REFRESH')">
+          {{ refreshing() ? '◌' : '↻' }}
+        </button>
+        <button type="button" class="more" (click)="showOptions.update(v => !v)"
+          [attr.aria-expanded]="showOptions()"
+          [attr.aria-label]="i18n.get('MAINMENU_MENU_TITLE')">
+          {{ showOptions() ? '⌃' : '⋯' }}
+        </button>
+      </div>
+    </div>
+    @if (showOptions()) {
+      <div class="options-row">
         <span class="counts" [attr.aria-label]="i18n.get('HISTORY_RECORDINGS') + ' ' + total()
           + ', ' + i18n.get('HISTORY_CONTACTS') + ' ' + contactCount()">
-          {{ total() }} / {{ contactCount() }}
+          {{ i18n.get('HISTORY_RECORDINGS') }} {{ total() }} ·
+          {{ i18n.get('HISTORY_CONTACTS') }} {{ contactCount() }}
         </span>
         <select class="sort-select" [value]="sortMode()" (change)="updateSort($event)"
           [attr.aria-label]="i18n.get('HISTORY_SORT')">
@@ -47,16 +61,12 @@ export type HistoryDirection = 'all' | 'in' | 'out' | 'voip';
             ? i18n.get('HISTORY_BY_CONTACT') : i18n.get('HISTORY_EACH')">
           {{ allRecordings() ? i18n.get('HISTORY_BY_CONTACT') : i18n.get('HISTORY_EACH') }}
         </button>
-        <button type="button" class="refresh" [disabled]="refreshing()" (click)="refresh.emit()"
-          [attr.aria-label]="i18n.get('HISTORY_REFRESH')">
-          {{ refreshing() ? '◌' : '↻' }}
-        </button>
         @if (search() || direction() !== 'all') {
           <button type="button" class="reset" (click)="resetFilters()"
             [attr.aria-label]="i18n.get('HISTORY_RESET_FILTERS')">×</button>
         }
       </div>
-    </div>
+    }
     @if (hasFilter()) {
       <span class="sr-only" aria-live="polite">
         {{ i18n.get('HISTORY_MATCHES') }} {{ matches() }}
@@ -65,35 +75,37 @@ export type HistoryDirection = 'all' | 'in' | 'out' | 'voip';
   `,
   styles: [`
     :host {display:block;min-width:0;background:var(--ion-background-color);}
-    .search-row,.filter-row {display:flex;align-items:center;gap:6px;padding:5px 8px;min-width:0;}
-    .search-row {border-bottom:1px solid var(--ion-color-step-150);}
+    .search-row,.filter-row,.options-row {display:flex;align-items:center;gap:6px;
+      padding:5px 10px;min-width:0;border-bottom:1px solid var(--ion-color-step-150);}
     .search-row input {min-width:0;flex:1 1 0;height:40px;border:1px solid var(--ion-color-step-200);
-      border-radius:9px;padding:0 10px;color:var(--ion-text-color);background:var(--ion-color-step-50);font-size:14px;}
-    .filter-row {border-bottom:1px solid var(--ion-color-step-150);}
+      border-radius:9px;padding:0 10px;color:var(--ion-text-color);
+      background:var(--ion-color-step-50);font-size:14px;}
     .direction-row {display:flex;gap:4px;align-items:center;overflow-x:auto;flex:1 1 auto;
       min-width:0;scrollbar-width:none;}
     .direction-row::-webkit-scrollbar {display:none;}
-    .direction-row button {flex:0 0 auto;border:0;border-radius:20px;min-height:40px;
-      padding:7px 9px;font-size:12px;color:var(--ion-text-color);background:var(--ion-color-step-100);}
-    .direction-row button.active {background:var(--ion-color-primary);color:var(--ion-color-primary-contrast);
-      font-weight:600;}
-    .summary-actions {display:flex;gap:4px;align-items:center;flex:0 0 auto;min-width:0;}
-    .counts {font-size:11px;color:var(--ion-color-step-650);white-space:nowrap;}
-    .sort-select {height:40px;min-width:0;max-width:90px;width:76px;border:1px solid var(--ion-color-step-200);
-      border-radius:8px;background:var(--ion-color-step-50);color:var(--ion-text-color);font-size:12px;}
-    .summary-actions button,.search-row button {min-width:36px;height:40px;padding:0 6px;
-      border:1px solid var(--ion-color-step-200);border-radius:8px;background:var(--ion-color-step-50);
-      color:var(--ion-text-color);font-size:12px;}
-    .summary-actions button.refresh {font-size:20px;}
-    .summary-actions button.reset,.search-row button.reset {font-size:22px;}
+    .direction-row button {flex:0 0 auto;border:0;border-radius:20px;min-height:38px;
+      padding:6px 10px;font-size:12px;color:var(--ion-text-color);background:var(--ion-color-step-100);}
+    .direction-row button.active {background:var(--ion-color-primary);
+      color:var(--ion-color-primary-contrast);font-weight:600;}
+    .summary-actions {display:flex;gap:4px;align-items:center;flex:0 0 auto;}
+    .options-row {background:var(--ion-color-step-50);min-height:40px;flex-wrap:wrap;justify-content:flex-end;}
+    .counts {font-size:11px;color:var(--ion-color-step-650);white-space:nowrap;
+      margin-right:auto;}
+    .sort-select {height:38px;min-width:85px;max-width:120px;border:1px solid var(--ion-color-step-200);
+      border-radius:8px;background:var(--ion-background-color);color:var(--ion-text-color);font-size:12px;}
+    .summary-actions button,.options-row button,.search-row button {min-width:38px;min-height:40px;
+      padding:0 8px;border:1px solid var(--ion-color-step-200);border-radius:8px;
+      background:var(--ion-background-color);color:var(--ion-text-color);font-size:13px;}
+    .summary-actions .refresh {font-size:21px;}
+    .summary-actions .more {font-size:23px;}
     .summary-actions button:disabled {opacity:.4;}
-    .summary-actions .view-mode {max-width:78px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .options-row .view-mode {max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
     .sr-only {position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
       clip:rect(0,0,0,0);white-space:nowrap;border:0;}
-    @media(max-width:400px) {
-      .counts {display:none;}
-      .sort-select {width:70px;}
+    @media(max-width:360px) {
+      .search-row,.filter-row,.options-row {padding-inline:7px;gap:4px;}
       .direction-row button {padding-inline:7px;}
+      .counts {flex:1 0 100%;margin-right:0;}
     }
   `],
 })
@@ -101,6 +113,7 @@ export class HistoryControlsComponent implements OnDestroy {
   protected readonly i18n = inject(I18nService);
   private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('historySearch');
   protected readonly searchVisible = signal(false);
+  protected readonly showOptions = signal(false);
   readonly search = input('');
   readonly searchChange = output<string>();
   readonly resetAll = output<void>();
