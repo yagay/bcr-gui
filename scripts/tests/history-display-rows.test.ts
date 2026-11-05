@@ -117,13 +117,13 @@ test('variable-height history is pixel-accurate and never overlays a neighbourin
     HISTORY_ROW_HEIGHT.detail,HISTORY_ROW_HEIGHT.player,HISTORY_ROW_HEIGHT.contact,
   ]);
   const offsets = historyRowOffsets(display);
-  assert.deepEqual(offsets, [0,80,128,298,388,468]);
+  assert.deepEqual(offsets, [0,90,146,286,376,466]);
   assert.equal(historyIndexAtOffset(offsets,0),0);
   assert.equal(historyIndexAtOffset(offsets,79),0);
-  assert.equal(historyIndexAtOffset(offsets,80),1);
-  assert.equal(historyIndexAtOffset(offsets,127),1);
-  assert.equal(historyIndexAtOffset(offsets,128),2);
-  assert.equal(historyIndexAtOffset(offsets,298),3);
+  assert.equal(historyIndexAtOffset(offsets,90),1);
+  assert.equal(historyIndexAtOffset(offsets,145),1);
+  assert.equal(historyIndexAtOffset(offsets,146),2);
+  assert.equal(historyIndexAtOffset(offsets,286),3);
   assert.equal(historyIndexAtOffset(offsets,100000),4);
   assert.equal(inlineRowOnScreen(display,records[1].audioUri,250,200,78),true);
   assert.equal(inlineRowOnScreen(display,records[1].audioUri,300,200,78),false);
@@ -139,4 +139,33 @@ test('details and player appear directly after the selected historical child', (
     'detail:'+records[2].audioUri,'player:'+records[2].audioUri,
   ]);
   assert.equal(rows.filter(r=>r.kind==='recording').length,3);
+});
+
+test('original selected ion-card holds its details while the full player remains below', () => {
+  const records = [call(0),call(1),call(2)];
+  const rows = buildDisplayRows(records, records[1].audioUri, {
+    isChild: r=>r===records[1],
+    inlineDetails:true,showDetails:true,showPlayer:false,
+  });
+  assert.deepEqual(rows.map(x=>x.kind),['recording','recording','recording']);
+  assert.deepEqual(rows.map(x=>x.height),[
+    HISTORY_ROW_HEIGHT.contact,HISTORY_ROW_HEIGHT.child+HISTORY_ROW_HEIGHT.detail,
+    HISTORY_ROW_HEIGHT.contact,
+  ]);
+  assert.deepEqual(historyRowOffsets(rows),[0,90,286,376]);
+  assert.equal(rows.filter(x=>x.kind==='player').length,0);
+  assert.equal(rows.filter(x=>x.kind==='detail').length,0);
+  // The selected older recording's card remains exactly one CDK item.
+  assert.equal(rows[1].key,records[1].audioUri);
+  assert.equal(historyIndexAtOffset(historyRowOffsets(rows),100),1);
+});
+test('original UI style uses the same number of data rows in both selection modes', () => {
+  const rows = Array.from({length:29},(_,i)=>call(i));
+  const unselected = buildDisplayRows(rows,undefined,{inlineDetails:true,showPlayer:false});
+  const selected = buildDisplayRows(rows,rows[12].audioUri,{
+    inlineDetails:true,showDetails:true,showPlayer:false,
+  });
+  assert.equal(unselected.length,29);
+  assert.equal(selected.length,29);
+  assert.equal(selected[12].height-unselected[12].height,HISTORY_ROW_HEIGHT.detail);
 });

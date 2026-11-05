@@ -146,3 +146,22 @@ The original recording reader, database, BCR's own settings and BCR core are
 unchanged. Debug-only CI checks the structural parity and executes variable
 height/scroll/29-record integrity tests; actual touch behaviour still requires
 on-device checking.
+
+## Full original GUI style with current recording data (November 2026)
+
+The page now reuses the **actual upstream ion-card / recording-group-title**
+templates and styles, the original bottom audio-player HTML/SCSS and the
+original Ionic toolbar-search appearance. It does not attempt to imitate the
+old controls with custom buttons, avatar rows, an inline audio dock or detached
+detail panels. Selected details render inside their recording card, matching
+the upstream hierarchy. The extra new filter/sort/VoIP functions remain
+accessible from a collapsed header options menu.
+
+Only the data/virtualization layer differs: the current SAF index, search,
+direction filtering, stable contact grouping, sort modes, URI-backed
+selection, and serialized native player are retained. The selected row
+advertises its true (base+details) height to the variable-size CDK strategy.
+The **full original bottom player** always occupies the page's second grid
+row while a recording is selected, without hiding behind an off-screen
+placeholder. Scroll geometry and bottom system navigation safety remain
+managed explicitly. Android Debug is the only automatic build in this branch.

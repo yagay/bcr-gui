@@ -1,97 +1,99 @@
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-
-const read = path => readFileSync(path, 'utf8');
+const read = path => readFileSync(path,'utf8');
 const page = read('src/app/pages/main/main.page.html');
 const controller = read('src/app/pages/main/main.page.ts');
+const styles = read('src/app/pages/main/main.page.scss');
 const row = read('src/app/features/recording-groups/history-recording-row.component.ts');
-const controls = read('src/app/features/recording-groups/history-controls.component.ts');
-const details = read('src/app/features/recording-groups/history-details.component.ts');
+const title = read('src/app/features/recording-groups/recording-group-title.component.html');
+const titleStyle = read('src/app/features/recording-groups/recording-group-title.component.scss');
+const toolbar = read('src/app/features/recording-groups/history-controls.component.ts');
 const player = read('src/app/components/audio-player/audio-player.component.ts');
-const inline = read('src/app/features/recording-groups/history-inline-player.component.ts');
+const originalPlayer = read('src/app/components/audio-player/audio-player.component.html');
 const projection = read('src/app/features/recording-groups/history-display-rows.ts');
 const strategy = read('src/app/features/recording-groups/history-variable-scroll.directive.ts');
-const style = read('src/app/pages/main/main.page.scss');
+
+assert.equal((page.match(/<app-audio-player\b/g) ?? []).length,1,'One native audio player');
+assert.equal((page.match(/<cdk-virtual-scroll-viewport\b/g) ?? []).length,1,'One CDK viewport');
+// The original card DOM and controls must be used, not a CSS approximation.
+assert(row.includes('<ion-card class="item"') && row.includes('<ion-card-header'),
+  'Upstream ion-card markup must render recordings');
+assert(row.includes('<ion-card-content class="content">') &&
+  row.includes("HOME_REC_PHONE_NUMBER") && row.includes("HOME_REC_TYPE") &&
+  row.includes("HOME_REC_SIZE"),'Upstream inline detail markup must be preserved');
+assert(row.includes('name="pencil"') && row.includes('name="share-social"') &&
+  row.includes('name="trash"'),'Upstream action icons changed');
+assert(row.includes('border-radius:10px') && row.includes('border-left:3px') &&
+  row.includes('box-shadow:0 5px 7px'),
+  'Upstream rounded/shadowed cards and indented child styling changed');
+assert(title.includes('<ion-card-title class="title">') &&
+  title.includes('play-circle-outline') && titleStyle.includes('font-size: 14pt'),
+  'Original caller header component must be reused');
+assert(!row.includes('class="avatar"'),'Avatar-first redesign must not return');
+assert(styles.includes('grid-template-rows:minmax(0,1fr) min-content') &&
+  styles.includes('padding:1em') && page.includes('class="player"'),
+  'Original full bottom player and grid page layout must be used');
+assert(originalPlayer.includes('<ion-range') && originalPlayer.includes('buttons-center') &&
+  originalPlayer.includes('play-skip-back') && originalPlayer.includes('play-forward'),
+  'Original full audio transport UI changed');
+assert(toolbar.includes('<ion-searchbar') && toolbar.includes('[debounce]="750"') &&
+  toolbar.includes('setFocus()'),'Original Ionic search bar and focus handling changed');
+assert(toolbar.includes('filtersVisible = signal(false)') &&
+  controller.includes('toggleFilters()'),
+  'New filters may remain but must not replace the original default top layout');
+
+// Only recording DATA and virtualization are modernized. Selected details share
+// the SAME virtual card row, with an exact declared height; no overlap.
+assert(page.includes('[historyVariableScroll]="displayRows()"') &&
+  !page.includes('[itemSize]'),'Heterogeneous card heights require the variable strategy');
+assert(controller.includes('inlineDetails: true') && controller.includes('showPlayer: false'),
+  'Details belong inside the card; the player is a separate bottom component');
+assert(projection.includes('inlineDetailsHeight') && strategy.includes('historyRowOffsets'),
+  'Selected cards must be measured instead of drawing over adjacent rows');
+assert(projection.includes('contact: 90') && projection.includes('child: 56'),
+  'Original card geometry or gap has changed');
+assert(page.includes('[style.height.px]="entry.height"'),
+  'Rendered card height must match the projected CDK height');
+
+// Keep all the new recording DATA and safety protections unchanged.
+assert(controller.includes('buildRecordingHistory(') &&
+  controller.includes('filterRecordingDirection(') &&
+  controller.includes('projectRecordingHistory('),
+  'Current filter/sort/group data pipeline must be preserved');
+assert(controller.includes('private selectedUris = signal') &&
+  controller.includes('setGroupSelection(old, [item])'),
+  'URI-backed selection must not regress to mutable Recording.selected');
+assert(!/\.selected\s*=/.test(controller),'Do not mutate Recording.selected flags');
+assert(player.includes('loadQueue: Promise<void>') &&
+  player.includes('transportQueue: Promise<void>') &&
+  player.includes('markReadyTimeout('),
+  'Current native playback serialisation and retry must remain');
 const datePipe = read('src/app/pipes/datetime.pipe.ts');
-
-// One native engine, one virtual viewport, no old fixed-height overlap.
-assert.equal((page.match(/<app-audio-player\b/g) ?? []).length, 1, 'Only one native audio engine');
-assert.equal((page.match(/<cdk-virtual-scroll-viewport\b/g) ?? []).length, 1, 'Only one viewport');
-assert(page.includes('[historyVariableScroll]="displayRows()"'), 'Variable-size strategy must be attached');
-assert(!page.includes('[itemSize]'), 'Fixed-size CDK cannot render 48/80/170px rows safely');
-assert(strategy.includes('VIRTUAL_SCROLL_STRATEGY') && strategy.includes('historyRowOffsets'),
-  'Virtual strategy must use accurate prefix-sum offsets');
-assert(projection.includes('child: 48') && projection.includes('contact: 80') &&
-  projection.includes('detail: 170') && projection.includes('player: 90'),
-  'Actual per-row height projection lost');
-assert(controller.includes('buildDisplayRows(') && controller.includes('showDetails: !this.isMultiselect()'),
-  'Selected details must be projected as virtual rows');
-assert(page.includes("entry.kind === 'detail'") && page.includes('<app-history-details'),
-  'Recording details must expand directly beneath the selected recording');
-assert(page.indexOf('<app-history-details') < page.indexOf('</cdk-virtual-scroll-viewport>'),
-  'Details must be part of the scrollable recording history, not a fixed dock');
-assert(page.includes('<app-history-inline-player') && page.includes('collapsed-player-dock'),
-  'Inline and offscreen playback controls must both remain');
-assert(inline.includes('<ion-range') && inline.includes('[pinFormatter]') && inline.includes('[snaps]'),
-  'Ionic native progress preview, snapping and step controls lost');
-assert(player.includes('loadQueue: Promise<void>') && player.includes('transportQueue: Promise<void>'),
-  'Native audio loads and transport must remain serialized');
-assert(player.includes('markReadyTimeout(') && player.includes('isReadyFor(recording: Recording)'),
-  'Failed native loads must be retryable');
-assert(controller.includes('inlineRowOnScreen(') && page.includes('(scroll)="onViewportScroll()"'),
-  'Audio dock must use real scroll intersection, not list membership');
-assert(controller.includes('focusRecording(item)'), 'Skipping must focus the target record');
-
-// Restore the original card visual hierarchy without reintroducing unbounded heights.
-assert(row.includes('is-child') && row.includes('child-info'), 'History child rows must be compact');
-assert(!row.includes('class="avatar"'), 'The new avatar-first layout replaced original card structure');
-assert(row.includes('border-radius:10px') && row.includes('margin:3px 12px'),
-  'Contact cards must preserve radius and side gutters');
-assert(details.includes('height:calc(100% - 4px)'),
-  'Details component must stay inside the measured CDK item');
-assert(inline.includes('height:90px'), 'Inline player must match its measured CDK item');
-
-// Same action surface, locale and original grouped selection semantics.
-for (const key of ['HOME_REC_PHONE_NUMBER', 'HOME_REC_TYPE', 'HOME_REC_SIZE']) {
-  assert(details.includes(key), 'Missing original detail field: ' + key);
-}
-assert(details.includes('recording().date | datetime') &&
-  row.includes('recording().date | datetime') &&
+assert(row.includes('recording().date | datetime') &&
   datePipe.includes('this.settings.dateTimeFormat') &&
-  datePipe.includes('this.settings.culture'), 'Configured date and locale must be honoured');
+  datePipe.includes('this.settings.culture'),
+  'Original date formatting and configured locale must still be used');
+assert(styles.includes('--history-navigation-clearance') &&
+  styles.includes('padding-bottom:var(--history-navigation-clearance)'),
+  'Android system navigation must not cover the bottom player');
+assert(controller.includes('ResizeObserver') &&
+  controller.includes('this.displayRows().length;'),
+  'First-entry CDK resize and loaded index handling must remain');
+assert(page.includes('HOME_PULL_TO_REFRESH') && page.includes('HOME_REFRESHING'),
+  'Original pull-to-refresh labels missing');
 assert(page.includes('(edit)="editItem(entry.recording)"') &&
   page.includes('(share)="shareRecording(entry.recording)"') &&
   page.includes('(delete)="deleteItems([entry.recording])"'),
-  'Edit/share/delete must remain attached to the selected record');
-assert(page.includes('[actionButtons]="actionButtons"') &&
-  controller.includes('this.historyControls()?.toggleSearch()') &&
-  controls.includes('nativeElement.focus()'), 'Original header search / autofocus lost');
-assert(controls.includes('showOptions = signal(false)') && controls.includes('filtersVisible = signal(false)') &&
-  controls.includes('directionChange = output') && controller.includes('toggleFilters()'),
-  'Directions, sorting and modes must be accessible from a compact header control');
-assert(controller.includes('private selectedUris = signal') &&
-  controller.includes('setGroupSelection(old, [item])') &&
-  row.includes('groupSelectClicked = output'),
-  'URI-based single/group selection must stay distinct');
-assert(!/\.selected\s*=/.test(controller), 'Do not mutate stale Recording.selected flags');
-assert(page.includes("HOME_PULL_TO_REFRESH") && page.includes("HOME_REFRESHING"),
-  'Original pull-to-refresh labels lost');
-assert(style.includes('flex:1 1 0;') && controller.includes('ResizeObserver'),
-  'Initial scrolling must not depend on mounting the player');
-assert(style.includes('--history-navigation-clearance') &&
-  style.includes('padding-bottom:var(--history-navigation-clearance)'),
-  'Android bottom navigation must not obscure the final item or player');
-const groupService = read('src/app/features/recording-groups/recording-groups.service.ts');
-assert(groupService.includes('group.sort((a, b) => b.date - a.date)'),
-  'Contact header must be newest call');
-assert(groupService.indexOf('const name =') < groupService.indexOf('let number ='),
-  'Original grouping must prioritize known contact names');
+  'Old recording detail actions must remain wired');
+const groups = read('src/app/features/recording-groups/recording-groups.service.ts');
+assert(groups.includes('group.sort((a, b) => b.date - a.date)') &&
+  groups.indexOf('const name =') < groups.indexOf('let number ='),
+  'Current contact grouping data must not change');
 for (const culture of ['en-US','zh-Hans','zh-Hant']) {
-  const translations = JSON.parse(read('src/assets/i18n/' + culture + '.json'));
-  for (const key of ['HISTORY_PLAY','HISTORY_SEARCH_HINT','HISTORY_SELECTED','HISTORY_PLAYER',
-    'HISTORY_SELECT_GROUP','HISTORY_DESELECT_GROUP']) {
-    assert(typeof translations[key] === 'string' && translations[key].length,
-      culture + ' missing ' + key);
+  const translation = JSON.parse(read('src/assets/i18n/'+culture+'.json'));
+  for (const name of ['HISTORY_PLAY','HISTORY_SELECTED','HISTORY_SELECT_GROUP',
+    'HISTORY_DESELECT_GROUP']) {
+    assert(typeof translation[name]==='string',culture+' missing '+name);
   }
 }
-console.log('Variable-height original-layout BCR-GUI architecture checks passed.');
+console.log('Original BCR-GUI visuals + current indexed recording data checks passed.');
