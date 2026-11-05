@@ -6,7 +6,7 @@ import { MessageBoxService } from 'src/app/services/message-box.service';
 import { RecordingsService } from 'src/app/services/recordings.service';
 import { SettingsService } from 'src/app/services/settings.service';
 import { AudioPlayer } from 'src/plugins/audioplayer';
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, effect, input, OnDestroy, OnInit, output, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, effect, input, OnDestroy, OnInit, output, signal, untracked } from '@angular/core';
 import { RangeCustomEvent } from '@ionic/angular';
 
 export enum PlayerStatusEnum {
@@ -40,15 +40,6 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   private removePlayerReadyListener?: () => Promise<void>;
   private removePlayerUpdateListener?: () => Promise<void>;
   private removePlayCompletedListener?: () => Promise<void>;
-  // Android exposes one native player; never overlap load/unload operations.
-  private loadQueue: Promise<void> = Promise.resolve();
-  private transportQueue: Promise<void> = Promise.resolve();
-  private loadGeneration = 0;
-  private loadedRecording?: Recording;
-  private nativeLoadAttempted = false;
-  private destroying = false;
-  private loadFailed = signal(false);
-  public readonly failedState = this.loadFailed.asReadonly();
 
   // inputs
   public recording = input.required<Recording>();
@@ -65,32 +56,13 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
     private recordingsService: RecordingsService,
     protected settings: SettingsService,
   ) {
-    // The effect tracks ONLY the recording input. Native-player lifecycle
-    // state writes must run outside Angular 18's reactive consumer; otherwise
-    // ready/status/progress.set() throws NG0600 on every recording switch.
     effect(() => {
-      const next = this.recording();
-      untracked(() => this.scheduleRecordingSwitch(next));
+      untracked(async () => await this.unload());
+      if (this.recording()) {
+        untracked(async () => await this.load(this.recording()));
+      }
     });
-  }
 
-  private scheduleRecordingSwitch(next: Recording) {
-    if (this.destroying) return;
-    const generation = ++this.loadGeneration;
-    this.loadFailed.set(false);
-    // Invalidate old callbacks synchronously before any asynchronous unload.
-    this.ready.set(false);
-    this.loadedRecording = undefined;
-    this.status.set(PlayerStatusEnum.Paused);
-    this.progress.set(0);
-    this.loadQueue = this.loadQueue
-      .catch(error => this.showError(error, 'switch queue'))
-      .then(async () => {
-        if (generation !== this.loadGeneration || this.destroying) return;
-        await this.releaseCurrent();
-        if (generation !== this.loadGeneration || this.destroying) return;
-        await this.load(next, generation);
-      });
   }
 
   async ngOnInit() {
@@ -105,132 +77,103 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   }
 
   async ngOnDestroy() {
-    this.destroying = true;
-    ++this.loadGeneration;
-    await this.loadQueue.catch(() => {});
-    await this.releaseCurrent();
+    // release asset
+    await this.unload();
     this._androidEventsSubs.unsubscribe();
   }
 
   /**
    * Preload audio file
    */
-  private async load(rec: Recording, generation: number) {
-    try {
-      if ((rec.duration || 0) <= 0) {
-        const info = await AudioPlayer.getAudioFileDuration({ fileUri: rec.audioUri });
-        if (generation !== this.loadGeneration || this.destroying) return;
-        rec.duration = info.duration / 1000;
-        await this.recordingsService.save();
-      }
-      if (generation !== this.loadGeneration || this.destroying) return;
-      this.duration.set(rec.duration || 0);
+  private async load(rec: Recording) {
 
-      // Register before native prepare: playerReady may arrive before
-      // AudioPlayer.load() resolves on a fast device.
-      this.removePlayerReadyListener = (await AudioPlayer.addListener('playerReady', () => {
-        if (generation !== this.loadGeneration || this.destroying) return;
-        this.loadedRecording = rec;
-        this.status.set(PlayerStatusEnum.Paused);
-        this.progress.set(0);
-        this.ready.set(true);
-        this.loadFailed.set(false);
-        this.cdr.markForCheck();
-      })).remove;
-
-      this.removePlayCompletedListener = (await AudioPlayer.addListener('playerCompleted', () => {
-        if (generation !== this.loadGeneration || this.destroying) return;
-        this.status.set(PlayerStatusEnum.Paused);
-        this.progress.set(0);
-        this.cdr.markForCheck();
-      })).remove;
-
-      this.removePlayerUpdateListener = (await AudioPlayer.addListener('playerUpdate', data => {
-        if (generation !== this.loadGeneration || this.destroying) return;
-        this.progress.set(Math.floor(data.position / 1000));
-      })).remove;
-
-      if (generation !== this.loadGeneration || this.destroying) return;
-      this.nativeLoadAttempted = true;
-      await AudioPlayer.load({
-        fileUri: rec.audioUri,
-        notificationTitle: rec.opName,
-        enableEarpiece: this.settings.enableEarpiece,
-        keepAwakeWhenPlaying: this.settings.keepAwakeWhenPlaying,
-      });
-      if (generation !== this.loadGeneration || this.destroying) return;
-      if (this.settings.playbackSpeed !== 1) {
-        await AudioPlayer.setPlaybackSpeed({ playbackSpeed: this.settings.playbackSpeed });
-      }
-    } catch (error) {
-      if (generation === this.loadGeneration && !this.destroying) {
-        this.ready.set(false);
-        this.loadedRecording = undefined;
-        this.loadFailed.set(true);
-        this.cdr.markForCheck();
-        this.showError(error, 'load()');
-      }
+    // free resources
+    if (this.ready()) {
+      await this.unload();
     }
+
+    if (rec) {
+
+      try {
+
+        // test if the selected recording duration field has been filled
+        // (duration field is filled asynchronously)
+        if ((rec.duration || 0) <= 0) {
+          const { duration } = await AudioPlayer.getAudioFileDuration({ fileUri: rec.audioUri });
+          rec.duration = duration / 1000;
+          // forcibly save updated recordings DB
+          await this.recordingsService.save();
+        }
+        this.duration.set(rec.duration);
+
+        await AudioPlayer.load({
+          fileUri: rec.audioUri,
+          notificationTitle: rec.opName,
+          enableEarpiece: this.settings.enableEarpiece,
+          keepAwakeWhenPlaying: this.settings.keepAwakeWhenPlaying,
+          // notificationText: this.dateTimePipe.transform(r.date, this.settings.dateTimeFormat),
+        });
+
+        // set initial playback speed (if !== 1)
+        if (this.settings.playbackSpeed !== 1) {
+          await AudioPlayer.setPlaybackSpeed({ playbackSpeed: this.settings.playbackSpeed });
+        }
+
+        // subscribe to player ready event
+        this.removePlayerReadyListener = await AudioPlayer.addListener('playerReady', async () => {
+          this.status.set(PlayerStatusEnum.Paused);
+          this.progress.set(0);
+          // init complete
+          this.ready.set(true);
+          this.cdr.detectChanges(); // workaround needed to let Angular update values...
+        }).remove;
+
+        // subscribe to playComplete event and
+        // save reference to listener remove function
+        this.removePlayCompletedListener = await AudioPlayer.addListener('playerCompleted', () => {
+          this.status.set(PlayerStatusEnum.Paused);
+          this.progress.set(0);
+          this.cdr.detectChanges(); // workaround needed to let Angular update values...
+        }).remove;
+
+        // subscribe to update event and
+        // save reference to listener remove function
+        this.removePlayerUpdateListener = await AudioPlayer.addListener('playerUpdate', (res) => {
+          this.progress.set(Math.floor(res.position / 1000));
+        }).remove;
+
+        // workaround needed to let Angular update values...
+        this.cdr.detectChanges();
+
+      } catch (error) {
+        this.showError(error, 'initializeplayer()')
+      }
+
+    }
+
   }
 
-  private async releaseCurrent() {
-    // Native play/pause/seek must complete before a new load/unload begins.
-    await this.transportQueue.catch(() => {});
-    this.ready.set(false);
-    this.loadedRecording = undefined;
-    this.status.set(PlayerStatusEnum.Paused);
-    this.progress.set(0);
-    this.duration.set(0);
-
-    const onReady = this.removePlayerReadyListener;
-    const onCompleted = this.removePlayCompletedListener;
-    const onUpdate = this.removePlayerUpdateListener;
-    this.removePlayerReadyListener = undefined;
-    this.removePlayCompletedListener = undefined;
-    this.removePlayerUpdateListener = undefined;
-    await Promise.allSettled([onReady?.(), onCompleted?.(), onUpdate?.()]);
-    // A fresh component has no native session to unload. This also avoids
-    // dispatching an unload before the Android service binding is available.
-    const shouldUnloadNative = this.nativeLoadAttempted;
-    this.nativeLoadAttempted = false;
-    if (shouldUnloadNative) await AudioPlayer.unload();
-    if (!this.destroying) this.cdr.markForCheck();
-  }
-
-  /** Explicit release also cancels an older queued recording request. */
+  /**
+   * Release loaded audio file
+   */
   public async unload() {
-    const generation = ++this.loadGeneration;
+
+    this.status.set(PlayerStatusEnum.Paused);
     this.ready.set(false);
-    this.loadedRecording = undefined;
-    this.loadQueue = this.loadQueue.catch(() => {}).then(async () => {
-      if (generation === this.loadGeneration) await this.releaseCurrent();
-    });
-    await this.loadQueue;
+
+    await AudioPlayer.unload();
+    await this.removePlayerReadyListener?.();
+    await this.removePlayCompletedListener?.();
+    await this.removePlayerUpdateListener?.();
+    this.cdr.detectChanges(); // workaround needed to let Angular update values...
+
   }
 
   /**
    * Test if the player is ready to play
    */
-  public isReady() { return this.ready(); }
-  public retryFailed(): void {
-    if (!this.destroying && this.loadFailed()) this.scheduleRecordingSwitch(this.recording());
-  }
-  /** Native prepare can stall without rejecting. Expose retry after UI timeout. */
-  public markReadyTimeout(recording: Recording): void {
-    if (this.destroying || this.recording() !== recording || this.isReadyFor(recording)) return;
-    this.ready.set(false);
-    this.loadFailed.set(true);
-    this.cdr.markForCheck();
-  }
-  /** Loading the previous file never counts as readiness for a newly selected one. */
-  public isReadyFor(recording: Recording) {
-    return this.ready() && this.loadedRecording === recording;
-  }
+  public isReady() { return this.ready() };
   public isPlaying() { return this.status() === PlayerStatusEnum.Playing; }
-  public readonly playingState = computed(() => this.status() === PlayerStatusEnum.Playing);
-  /** Read-only progress for the compact controller; no second playback timer. */
-  public readonly currentPosition = this.progress.asReadonly();
-  public readonly totalDuration = this.duration.asReadonly();
 
   /**
    * Show error alert
@@ -244,46 +187,27 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * All native transport commands use one serial queue. Each command checks
-   * the generation both before AND after the native Promise resolves, so a
-   * stale play response cannot mark the next recording as playing.
+   * Toggle between play and pause
    */
-  private enqueueTransport(action: (generation: number) => Promise<void>): Promise<void> {
-    const generation = this.loadGeneration;
-    this.transportQueue = this.transportQueue.catch(() => {}).then(async () => {
-      if (!this.ready() || generation !== this.loadGeneration || this.destroying) return;
-      try {
-        await action(generation);
-      } catch (error) {
-        if (generation === this.loadGeneration && !this.destroying) {
-          this.showError(error, 'transport');
-        }
-      }
-    });
-    return this.transportQueue;
+  public async togglePlayPause() {
+    if (this.status() === PlayerStatusEnum.Paused) {
+      return this.play();
+    }
+    else {
+      return this.pause();
+    }
   }
 
-  public async togglePlayPause(): Promise<void> {
-    return this.enqueueTransport(async generation => {
-      const playing = this.status() === PlayerStatusEnum.Playing;
-      if (playing) await AudioPlayer.pause();
-      else await AudioPlayer.play();
-      if (generation === this.loadGeneration && !this.destroying) {
-        this.status.set(playing ? PlayerStatusEnum.Paused : PlayerStatusEnum.Playing);
-        this.cdr.markForCheck();
-      }
-    });
-  }
+  /**
+   * Play the given record file (already loaded with load())
+   */
+  async play() {
 
-  async play(): Promise<void> {
-    return this.enqueueTransport(async generation => {
-      if (this.status() === PlayerStatusEnum.Playing) return;
-      await AudioPlayer.play();
-      if (generation === this.loadGeneration && !this.destroying) {
+    return AudioPlayer.play()
+      .then(async _ => {
         this.status.set(PlayerStatusEnum.Playing);
-        this.cdr.markForCheck();
-      }
-    });
+      })
+      .catch(error => this.showError(error, 'play()'));
   }
 
   /**
@@ -308,13 +232,19 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   /**
    * Toggle player speed
    */
-  public async toggleSpeed(): Promise<void> {
-    const oldSpeed = this.settings.playbackSpeed;
-    const nextSpeed = oldSpeed === 1 ? 1.5 : oldSpeed === 1.5 ? 2 : 1;
-    await this.enqueueTransport(async () => {
-      await AudioPlayer.setPlaybackSpeed({ playbackSpeed: nextSpeed });
-    });
-    this.settings.playbackSpeed = nextSpeed;
+  protected async toggleSpeed() {
+    switch (this.settings.playbackSpeed) {
+      case 1:
+        this.settings.playbackSpeed = 1.5;
+        break;
+      case 1.5:
+        this.settings.playbackSpeed = 2;
+        break;
+      case 2:
+        this.settings.playbackSpeed = 1;
+        break;
+    }
+    await AudioPlayer.setPlaybackSpeed({ playbackSpeed: this.settings.playbackSpeed });
     await this.settings.save();
   }
 
@@ -322,31 +252,27 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
    * Set position
    */
   protected async setCurrentPosition(position: number) {
-    return this.seekTo(position);
+    if (!position || position < 0) {
+      position = 0;
+    }
+    AudioPlayer.setCurrentPosition({ position: position * 1000 });
   }
 
-  /** Shared seek implementation for the original player and the inline row. */
-  public async seekTo(position: number): Promise<void> {
-    if (!Number.isFinite(position)) return;
-    return this.enqueueTransport(async generation => {
-      const clamped = Math.max(0, Math.min(position, this.duration()));
-      await AudioPlayer.setCurrentPosition({ position: clamped * 1000 });
-      if (generation === this.loadGeneration && !this.destroying) {
-        this.progress.set(clamped);
-        this.cdr.markForCheck();
-      }
-    });
-  }
+  /**
+   * Pause the playing media file
+   */
+  async pause() {
 
-  async pause(): Promise<void> {
-    return this.enqueueTransport(async generation => {
-      if (this.status() !== PlayerStatusEnum.Playing) return;
-      await AudioPlayer.pause();
-      if (generation === this.loadGeneration && !this.destroying) {
+    if (this.status() !== PlayerStatusEnum.Playing) {
+      return;
+    }
+
+    // pause audio
+    await AudioPlayer.pause()
+      .then(_ => {
         this.status.set(PlayerStatusEnum.Paused);
-        this.cdr.markForCheck();
-      }
-    });
+      })
+      .catch(error => this.showError(error, 'pause()'));
   }
 
   /**

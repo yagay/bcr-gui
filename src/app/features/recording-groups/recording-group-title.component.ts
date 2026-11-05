@@ -16,11 +16,6 @@ export class RecordingGroupTitleComponent {
   @Input({ required: true }) groupCount!: number;
   @Input({ required: true }) expanded!: boolean;
   @Input({ required: true }) selected!: boolean;
-  @Input() multiselect = false;
-  @Input() groupSelected = false;
-  @Input() groupPartial = false;
-  @Output() selectGroup = new EventEmitter<void>();
-  @Output() expandRequested = new EventEmitter<void>();
 
   @Output() playRecording = new EventEmitter<Recording>();
 }

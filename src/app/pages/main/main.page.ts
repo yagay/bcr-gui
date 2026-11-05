@@ -1,32 +1,33 @@
 import { AudioPlayerComponent, SkipDirection } from 'src/app/components/audio-player/audio-player.component';
+import { CallIconComponent } from 'src/app/components/call-icon/call-icon.component';
 import { ActionButton, HeaderComponent } from 'src/app/components/header/header.component';
 import { VirtualScrollbarComponent } from 'src/app/components/virtual-scrollbar/virtual-scrollbar.component';
+import { LongPressDirective } from 'src/app/directives/long-press.directive';
 import { RecordingGroupsService } from 'src/app/features/recording-groups/recording-groups.service';
-import { HistoryRecordingRowComponent } from 'src/app/features/recording-groups/history-recording-row.component';
-import { HistoryControlsComponent } from 'src/app/features/recording-groups/history-controls.component';
+import { CallFilter, callSourceLabel, filterCallRecordings, isVoipRecording, localDayKey } from 'src/app/features/call-history/call-history';
 import { IonicBundleModule } from 'src/app/IonicBundle.module';
 import { Recording } from 'src/app/models/recording';
 import { DatetimePipe } from 'src/app/pipes/datetime.pipe';
 import { FilesizePipe } from 'src/app/pipes/filesize.pipe';
 import { ToHmsPipe } from 'src/app/pipes/to-hms.pipe';
+import { TranslatePipe } from 'src/app/pipes/translate.pipe';
 import { ContactsService } from 'src/app/services/contacts.service';
 import { I18nService } from 'src/app/services/i18n.service';
 import { MessageBoxService } from 'src/app/services/message-box.service';
 import { RecordingsService } from 'src/app/services/recordings.service';
 import { SettingsService } from 'src/app/services/settings.service';
-import { buildRecordingHistory, projectRecordingHistory, historyConsistency, filterRecordingDirection, HistoryFilter } from 'src/app/features/recording-groups/recording-history.model';
-import { SortModeEnum } from 'src/app/utils/recordings-sorter';
-import { buildDisplayRows, HistoryDisplayRow, actionRecords, selectionState, setGroupSelection, invertRecordingSelection, inlineRowOnScreen, HISTORY_ROW_HEIGHT } from 'src/app/features/recording-groups/history-display-rows';
-import { HistoryVariableScrollDirective } from 'src/app/features/recording-groups/history-variable-scroll.directive';
+import { filterList } from 'src/app/utils/filterList';
+import { SortModeEnum, sortRecordings } from 'src/app/utils/recordings-sorter';
 import { untilTrue } from 'src/app/utils/waitForAsync';
 import { AndroidSAF } from 'src/plugins/androidsaf';
 import { ErrorCode } from 'src/plugins/bcrgui';
 import { CdkVirtualScrollViewport, ScrollingModule } from '@angular/cdk/scrolling';
 import { DatePipe } from '@angular/common';
-import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, effect, inject, OnDestroy, signal, untracked, viewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, inject, signal, untracked, viewChild } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Clipboard } from '@capacitor/clipboard';
-import { ActionSheetController, RefresherCustomEvent } from '@ionic/angular';
+import { ActionSheetController, IonSearchbar, RefresherCustomEvent } from '@ionic/angular';
 import version from '../../version';
 
 @Component({
@@ -37,15 +38,16 @@ import version from '../../version';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     AudioPlayerComponent,
+    CallIconComponent,
     DatetimePipe,
     FilesizePipe,
+    FormsModule,
     HeaderComponent,
     IonicBundleModule,
-    HistoryRecordingRowComponent,
-    HistoryControlsComponent,
-    HistoryVariableScrollDirective,
+    LongPressDirective,
     ScrollingModule,
     ToHmsPipe,
+    TranslatePipe,
     VirtualScrollbarComponent,
   ],
   providers: [
@@ -55,45 +57,70 @@ import version from '../../version';
     ToHmsPipe,
   ],
 })
-export class MainPage implements AfterViewInit, OnDestroy {
+export class MainPage implements AfterViewInit {
 
   protected version = version;
   protected isMultiselect = signal(false);
+  protected isSearch = signal(false);
   protected searchValue = signal('');
-  protected showAllRecordings = signal(false);
-  protected directionFilter = signal<HistoryFilter>('all');
-  private playRequestId = 0;
-  private viewportResizeObserver?: ResizeObserver;
-  private resizeFrame = 0;
-  private viewportScrollFrame = 0;
-  private scrollOffsetPx = signal(0);
-  private viewportHeightPx = signal(0);
-  // Restore the original header search affordance while keeping new filters below.
-  protected actionButtons: ActionButton[] = [
+  protected callFilter = signal<CallFilter>('all');
+  protected detailGroupKey = signal<string | undefined>(undefined);
+  protected playerExpanded = signal(false);
+  protected filterLabels = [
+    { key: 'all' as const, zh: '全部', en: 'All' },
+    { key: 'in' as const, zh: '来电', en: 'Incoming' },
+    { key: 'out' as const, zh: '去电', en: 'Outgoing' },
+    { key: 'voip' as const, zh: 'VoIP', en: 'VoIP' },
+  ];
+  protected isZh = /^zh\b/i.test(navigator.language);
+  protected callHistoryLabels = {
+    details: this.isZh ? '通话详情' : 'Call details',
+    close: this.isZh ? '关闭' : 'Close',
+    empty: this.isZh ? '没有符合条件的录音' : 'No matching recordings',
+    recordings: this.isZh ? '条录音' : 'recordings',
+    share: this.isZh ? '分享' : 'Share',
+    delete: this.isZh ? '删除' : 'Delete',
+    edit: this.isZh ? '编辑' : 'Edit',
+    play: this.isZh ? '播放' : 'Play',
+    audio: this.isZh ? '录音' : 'Recording',
+  };
+  actionButtons: ActionButton[] = [
     {
       icon: () => this.searchValue() ? 'search-circle' : 'search-circle-outline',
       visible: () => !this.isMultiselect(),
-      onClick: () => this.historyControls()?.toggleSearch(),
-    },
-    {
-      icon: () => this.directionFilter() !== 'all' || this.showAllRecordings()
-        ? 'options' : 'options-outline',
-      visible: () => !this.isMultiselect(),
-      onClick: () => this.historyControls()?.toggleFilters(),
+      onClick: () => this.toggleSearchBar(),
     },
   ];
   selectedItem = signal<Recording | undefined>(undefined);
+  selectedItemIndex = computed<number>(() => {
+    const item = this.selectedItem();
+    return this.items()?.findIndex(i => i === item) ?? -1;
+  });
+
   protected recordingGroups = inject(RecordingGroupsService);
   protected expandedGroupKey = this.recordingGroups.expandedGroupKey;
 
   // Filtered and sorted recordings before the collapsed contact view is applied.
   // Playback, multiselection and intent handling must keep using the full list.
   private sortedItems = computed<Recording[]>(() => {
-    const sortedItems = buildRecordingHistory(
-      filterRecordingDirection(this.recordingsService.recordings(), this.directionFilter()),
+    const filteredItems = filterList(
+      this.recordingsService.recordings(),
       this.searchValue(),
-      this.sortMode(),
+      r => `${r.opName} ${r.opNumber}`
     );
+    const sortedItems = sortRecordings(
+      filterCallRecordings(filteredItems, this.callFilter()),
+      this.settings.recordingsSortMode,
+    );
+
+    // Preserve the upstream behavior: a selected recording must be cleared when
+    // it is no longer part of the filtered list.
+    untracked(() => {
+      const selected = this.selectedItem();
+      if (selected && !sortedItems.includes(selected)) {
+        this.clearSelection();
+      }
+    });
 
     return sortedItems;
   });
@@ -102,309 +129,56 @@ export class MainPage implements AfterViewInit, OnDestroy {
   protected groups = computed(() => this.recordingGroups.buildGroups(
     this.sortedItems(),
     this.settings.defaultCountryPrefix,
-    this.sortMode(),
   ));
 
-  // filtered and grouped items collection
-  protected items = computed(() => this.showAllRecordings()
-    ? this.sortedItems()
-    : projectRecordingHistory(
-      this.groups(), this.recordingGroups, this.sortMode(),
-      this.settings.defaultCountryPrefix,
-    ));
-  // The source count is intentionally independent of the expanded/collapsed
-  // CDK rows. Grouping must never change the number of indexed recordings.
-  protected displayRows = computed(() => buildDisplayRows(
-    this.items(),
-    this.isMultiselect() ? undefined : this.selectedItem()?.audioUri,
-    {
-      // The original selected card contains its details, and the original
-      // full player lives in the grid below the list. Only data is new.
-      isChild: item => !this.showAllRecordings() && !this.isGroupHeader(item),
-      showDetails: !this.isMultiselect(),
-      inlineDetails: true,
-      showPlayer: false,
-      detailHeight: HISTORY_ROW_HEIGHT.detail,
-    },
+  // A fixed-height virtual list contains ONE summary per contact/number.
+  // Group history lives in a separate sheet: expanding never alters row height.
+  protected items = computed(() => sortRecordings(
+    Array.from(this.groups().values(), group => group[0]),
+    this.settings.recordingsSortMode,
   ));
-  protected displayCount = computed(() => this.displayRows().length);
-  protected indexedCount = computed(() => this.recordingsService.recordings().length);
-  private selectedUris = signal<ReadonlySet<string>>(new Set());
-  protected selectedCount = computed(() => this.sortedItems().filter(item => this.selectedUris().has(item.audioUri)).length);
-  protected initializing = signal(true);
-  protected scrubbing = signal(false);
-  protected scrubPosition = signal(0);
-  protected sortMode = signal<SortModeEnum>(this.settings.recordingsSortMode);
-  protected isRefreshing = computed(() => this.recordingsService.refreshProgress() !== undefined);
-  protected visibleCount = computed(() => this.items().length);
-  protected groupCount = computed(() => this.groups().size);
-  protected historyIntegrity = computed(() => historyConsistency(this.sortedItems(), this.groups()));
-  protected setSortMode(mode: SortModeEnum): void {
-    if (this.sortMode() === mode) return;
-    this.resetListInteraction();
-    this.sortMode.set(mode);
-    this.settings.recordingsSortMode = mode;
-    void this.settings.save();
-    this.scrollViewport()?.scrollToIndex(0);
-    this.remeasureViewport();
-  }
-
-  protected trackByDisplayRow(_index: number, entry: HistoryDisplayRow): string {
-    return entry.key;
-  }
-
-  protected inlineProgress(): number { return this.scrubbing() ? this.scrubPosition() : (this.player()?.currentPosition() ?? 0); }
-  protected inlineDuration(): number { return this.player()?.totalDuration() ?? this.selectedItem()?.duration ?? 0; }
-  protected inlinePlaying(): boolean { return this.player()?.playingState() === true; }
-  protected inlineReady(): boolean { return this.selectedItem() !== undefined && this.player()?.isReadyFor(this.selectedItem()!) === true; }
-  protected inlineFailed(): boolean { return this.player()?.failedState() === true; }
-  protected previewSeek(position: number): void {
-    if (Number.isFinite(position)) {
-      this.scrubbing.set(true);
-      this.scrubPosition.set(position);
-    }
-  }
-
-  protected seekInline(position: number): void {
-    if (Number.isFinite(position)) void this.player()?.seekTo(position);
-    this.scrubbing.set(false);
-  }
-
-  protected seekRelative(direction: -1 | 1): void {
-    if (!this.inlineReady()) return;
-    const target = (this.player()?.currentPosition() ?? 0) + direction * this.settings.seekTime;
-    void this.player()?.seekTo(target);
-  }
-
-  protected canSkip(direction: SkipDirection): boolean {
-    // The previous button also rewinds the current track after 3 seconds.
-    if (direction === 'prev' && (this.player()?.currentPosition() ?? 0) >= 3) return true;
-    const index = this.sortedItems().findIndex(record => record === this.selectedItem());
-    const target = index + (direction === 'next' ? 1 : -1);
-    return index >= 0 && target >= 0 && target < this.sortedItems().length;
-  }
-
-  // When a playing child recording is folded away, keep its controls reachable.
-  protected inlinePlayerVisible(): boolean {
-    return inlineRowOnScreen(
-      this.displayRows(),
-      this.selectedItem()?.audioUri,
-      this.scrollOffsetPx(),
-      this.viewportHeightPx(),
-      HISTORY_ROW_HEIGHT.player,
-    );
-  }
-  protected toggleInline(): void {
-    const item = this.selectedItem();
-    if (item) void this.selectAndPlay(item);
-  }
-  protected switchPlaybackSpeed(): void { void this.player()?.toggleSpeed(); }
-  protected playbackSpeed(): number { return this.settings.playbackSpeed; }
-  protected setDirectionFilter(value: HistoryFilter): void {
-    if (this.directionFilter() === value) return;
-    this.resetListInteraction();
-    this.directionFilter.set(value);
-    this.scrollViewport()?.scrollToIndex(0);
-    this.remeasureViewport();
-  }
-
-  private resetListInteraction(): void {
-    this.clearSelection();
-    this.recordingGroups.expandedGroupKey.set(undefined);
-  }
-
-  protected refreshFromToolbar(): void {
-    void this.refreshList();
-  }
-
-  protected toggleViewMode() {
-    this.resetListInteraction();
-    this.showAllRecordings.update(v => !v);
-    this.scrollViewport()?.scrollToIndex(0);
-    this.remeasureViewport();
-  }
-
-  protected toggleGroup(item: Recording): void {
-    if (this.showAllRecordings() || this.isMultiselect()) return;
-    // Only affect the presentation. Do not deselect, pause or unload the
-    // recording currently playing within a collapsed contact group.
-    this.recordingGroups.toggle(item, this.settings.defaultCountryPrefix);
-    this.remeasureViewport();
-  }
-
-  protected isRowPlaying(item: Recording): boolean {
-    return this.selectedItem() === item && this.player()?.playingState() === true;
-  }
-
-  protected onPlayRow(item: Recording) {
-    if (this.isMultiselect()) {
-      this.onRowClick(item);
-      return;
-    }
-    // Playing the group's representative recording must not silently
-    // expand its history. Only the chevron or main row tap controls expansion.
-    const header = !this.showAllRecordings() && this.isGroupHeader(item) && this.getGroupCount(item) > 1;
-    void this.selectAndPlay(item, !header);
-  }
-
-  /**
-   * The latest requested recording wins. A native player is shared across
-   * every row; never try to play while the previous file is still loaded.
-   */
-  private async selectAndPlay(item: Recording, expandGroup = true): Promise<void> {
-    if (this.selectedItem() === item && this.player()?.isReadyFor(item)) {
-      ++this.playRequestId;
-      await this.player()?.togglePlayPause();
-      this.focusRecording(item);
-      return;
-    }
-    const request = ++this.playRequestId;
-    const retry = this.selectedItem() === item && this.player()?.failedState() === true;
-    this.selectRecording(item, expandGroup);
-    this.cdr.detectChanges();
-    if (retry) this.player()?.retryFailed();
-    this.focusRecording(item);
-    this.remeasureViewport();
-    try {
-      await untilTrue(
-        () => request !== this.playRequestId ||
-          (this.selectedItem() === item && (this.player()?.isReadyFor(item) === true ||
-            this.player()?.failedState() === true)),
-        75, 12000,
-      );
-      if (request === this.playRequestId && this.selectedItem() === item &&
-          this.player()?.isReadyFor(item)) {
-        await this.player()?.play();
-      }
-    } catch {
-      if (request === this.playRequestId && this.selectedItem() === item) {
-        this.player()?.markReadyTimeout(item);
-        this.mbs.showError({ error: new Error('Playback preparation timed out. Tap retry to load this recording again.') });
-      }
-    }
-  }
-
-  /** Navigate the actual CDK source rows, not the collapsed group count. */
-  private focusRecording(item: Recording): void {
-    requestAnimationFrame(() => {
-      if (this.selectedItem()?.audioUri !== item.audioUri) return;
-      const index = this.displayRows().findIndex(row =>
-        row.kind === 'recording' && row.recording.audioUri === item.audioUri);
-      if (index < 0) return;
-      const viewport = this.scrollViewport();
-      viewport?.checkViewportSize();
-      viewport?.scrollToIndex(Math.max(0, index - 1), 'smooth');
-      this.onViewportScroll();
-    });
-  }
-
-  private selectRecording(item: Recording, expandGroup = true): void {
-    this.selectedUris.set(new Set());
-    if (expandGroup && !this.showAllRecordings()) {
-      this.recordingGroups.expand(item, this.settings.defaultCountryPrefix);
-    }
-    this.selectedItem.set(item);
-    this.scrubbing.set(false);
-    this.isMultiselect.set(false);
-    this.cdr.markForCheck();
-  }
-
-  private groupActionRecords(item: Recording): Recording[] {
-    return actionRecords(
-      item,
-      this.showAllRecordings() || this.isGroupHeader(item),
-      !this.showAllRecordings(),
-      this.groups().get(this.getGroupKey(item)) ?? [item],
-    );
-  }
-
-  protected rowSelected(item: Recording): boolean {
-    // A tap selects the touched recording only, as in the stable GUI.
-    if (!this.isMultiselect()) return this.selectedItem() === item;
-    return this.selectedUris().has(item.audioUri);
-  }
-
-  protected groupFullySelected(item: Recording): boolean {
-    return this.isMultiselect() &&
-      selectionState(this.groupActionRecords(item), this.selectedUris()) === 'all';
-  }
-
-  protected toggleGroupSelection(item: Recording): void {
-    if (!this.isMultiselect()) return;
-    this.selectedUris.update(old => setGroupSelection(old, this.groupActionRecords(item)));
-    this.cdr.markForCheck();
-  }
-
-  protected rowPartSelected(item: Recording): boolean {
-    return this.isMultiselect() &&
-      selectionState(this.groupActionRecords(item), this.selectedUris()) === 'partial';
-  }
-
-  protected onRowClick(item: Recording) {
-    if (this.isMultiselect()) {
-      this.selectedUris.update(old => setGroupSelection(old, [item]));
-      this.cdr.markForCheck();
-      return;
-    }
-    if (!this.showAllRecordings() && this.isGroupHeader(item) && this.getGroupCount(item) > 1) {
-      // Original contact-row behavior: expand and select the latest file.
-      // Its chevron remains expand-only and its play button remains play-only.
-      const same = this.selectedItem()?.audioUri === item.audioUri;
-      const expanded = this.expandedGroupKey() === this.getGroupKey(item);
-      if (same && expanded) {
-        this.recordingGroups.toggle(item, this.settings.defaultCountryPrefix);
-        this.clearSelection();
-      } else {
-        ++this.playRequestId;
-        this.selectRecording(item);
-        this.cdr.detectChanges();
-        this.remeasureViewport();
-      }
-      return;
-    }
-    if (this.selectedItem() === item) {
-      this.clearSelection();
-    } else {
-      ++this.playRequestId;
-      this.selectRecording(item);
-      this.cdr.detectChanges();
-      this.remeasureViewport();
-    }
-  }
-
+  protected detailRecords = computed(() => {
+    const key = this.detailGroupKey();
+    return key ? (this.groups().get(key) ?? []) : [];
+  });
+  protected detailHeading = computed(() => {
+    const record = this.detailRecords()[0];
+    return record ? this.callerLabel(record) : this.callHistoryLabels.details;
+  });
 
   protected topIndex = 0; // index of top shown recording
-  // Physical row heights are declared in the HistoryDisplayRow projection.
-  protected readonly rowHeights = HISTORY_ROW_HEIGHT;
+  protected itemHeight = 86;
+  protected itemGap = 0;
 
-  private player = viewChild(AudioPlayerComponent);
+  protected player = viewChild(AudioPlayerComponent);
   private scrollViewport = viewChild(CdkVirtualScrollViewport);
-  private variableScroll = viewChild(HistoryVariableScrollDirective);
-  private historyControls = viewChild(HistoryControlsComponent);
+  private searchBar = viewChild(IonSearchbar);
 
   constructor(
     private asc: ActionSheetController,
     private cdr: ChangeDetectorRef,
     private contactsService: ContactsService,
     private datePipe: DatePipe,
-    protected i18n: I18nService,
+    private i18n: I18nService,
     private mbs: MessageBoxService,
     private toHms: ToHmsPipe,
     protected recordingsService: RecordingsService,
     protected router: Router,
     protected settings: SettingsService,
   ) {
-    // An initial SAF index is populated after the viewport first renders.
-    // Recalculate CDK's rendered range when recording/group counts change,
-    // not only when a recording gets selected and the player is mounted.
-    effect(() => {
-      this.displayRows().length;
-      untracked(() => this.remeasureViewport());
-    });
+
+    // // DEBUG: automatically select first recording
+    // if (!environment.production) {
+    //   effect(() => {
+    //     if (this.items()?.length) {
+    //       setTimeout(() => this.onItemClick(this.items()[0]), 250);
+    //     }
+    //   });
+    // }
+
   }
 
   async ionViewWillEnter() {
-    this.sortMode.set(this.settings.recordingsSortMode);
 
     // save reference to myself
     this.recordingsService.mainPageRef = this;
@@ -426,25 +200,30 @@ export class MainPage implements AfterViewInit, OnDestroy {
     await untilTrue(() => this.recordingsService.refreshProgress() === undefined);
 
     this.clearFilter();
-    this.directionFilter.set('all');
-    this.clearSelection();
+    this.setCallFilter('all');
+    this.isMultiselect.set(false);
 
     // Find the requested file in the full list and expand its contact first. An
     // older recording is intentionally absent from the collapsed display list.
     const playItem = this.sortedItems().find(i => i.audioUri === viewIntentFilename);
     if (playItem) {
-      if (!this.showAllRecordings()) this.recordingGroups.expand(playItem, this.settings.defaultCountryPrefix);
-      const playItemIx = this.items().findIndex(i => i === playItem);
+      const key = this.getGroupKey(playItem);
+      const playItemIx = this.items().findIndex(i => this.getGroupKey(i) === key);
 
       // ensure it's visible
-      this.scrollViewport()?.scrollToIndex(playItemIx >= 0 ? this.displayRows().findIndex(row => row.key === playItem.audioUri) : 0);
+      if (playItemIx >= 0) this.scrollViewport()?.scrollToIndex(playItemIx);
 
-      await this.selectAndPlay(playItem);
+      // select & play it (need to wait for player initialization)
+      playItem.selected = true;
+      this.selectedItem.set(playItem);
+      this.cdr.detectChanges(); // forcibly detect the .selected change above
+      await untilTrue(() => this.player()?.recording() === playItem && this.player()!.isReady());
+      this.player()?.play();
 
     }
     else if (!forceListRefresh) {
       // retry forcing list refresh
-      await this.playIntentFile(viewIntentFilename, true);
+      this.playIntentFile(viewIntentFilename, true);
     }
     else {
       // error
@@ -463,108 +242,145 @@ export class MainPage implements AfterViewInit, OnDestroy {
    * Stop the player before leaving the page
    */
   async ionViewWillLeave() {
+    // clear reference to myself
     this.recordingsService.mainPageRef = undefined;
-    ++this.playRequestId;
+
     await this.stopPlayer();
     // this._subs.unsubscribe();
   }
 
   async ngAfterViewInit() {
-    // Begin observing before SAF indexing: the first Ionic page layout can
-    // complete before the recording index finishes loading.
-    const viewport = this.scrollViewport()?.elementRef.nativeElement;
-    if (viewport && typeof ResizeObserver !== 'undefined') {
-      this.viewportResizeObserver = new ResizeObserver(() => this.remeasureViewport());
-      this.viewportResizeObserver.observe(viewport);
-      const parent = viewport.parentElement;
-      if (parent) this.viewportResizeObserver.observe(parent);
-    }
-    this.remeasureViewport();
-    try {
-      await this.recordingsService.initialize();
-    } finally {
-      this.initializing.set(false);
-      this.cdr.markForCheck();
-      this.remeasureViewport();
-    }
+    await this.recordingsService.initialize();
   }
 
-  async ionViewDidEnter() {
-    this.remeasureViewport();
-  }
-
-  ngOnDestroy(): void {
-    this.viewportResizeObserver?.disconnect();
-    if (this.resizeFrame) cancelAnimationFrame(this.resizeFrame);
-    if (this.viewportScrollFrame) cancelAnimationFrame(this.viewportScrollFrame);
-  }
-
-  private remeasureViewport(): void {
-    // Coalesce Ionic transitions, initial SAF refresh and row changes into
-    // one measurement per frame. Never scroll or change row geometry here.
-    if (this.resizeFrame) cancelAnimationFrame(this.resizeFrame);
-    this.resizeFrame = requestAnimationFrame(() => {
-      this.resizeFrame = 0;
-      const viewport = this.scrollViewport();
-      viewport?.checkViewportSize();
-      this.variableScroll()?.strategy.checkViewport();
-      this.viewportHeightPx.set(viewport?.getViewportSize() ?? 0);
-      this.scrollOffsetPx.set(viewport?.measureScrollOffset('top') ?? 0);
-    });
-  }
-
-  protected onViewportScroll(): void {
-    if (this.viewportScrollFrame) return;
-    this.viewportScrollFrame = requestAnimationFrame(() => {
-      this.viewportScrollFrame = 0;
-      const viewport = this.scrollViewport();
-      this.viewportHeightPx.set(viewport?.getViewportSize() ?? 0);
-      this.scrollOffsetPx.set(viewport?.measureScrollOffset('top') ?? 0);
-    });
-  }
-
-  async refreshList(event?: RefresherCustomEvent) {
+  refreshList(event?: RefresherCustomEvent) {
+    event?.target.complete();
     this.clearSelection();
-    try {
-      await this.recordingsService.refreshContent();
-    } finally {
-      await event?.target.complete();
-      this.remeasureViewport();
-    }
+    return this.recordingsService.refreshContent();
   }
 
   clearSelection() {
-    ++this.playRequestId;
-    this.selectedUris.set(new Set());
+    this.recordingsService.recordings().forEach(r => r.selected = false); // remove flag from itemsAll, just to stay safe...😉
     this.selectedItem.set(undefined);
-    this.scrubbing.set(false);
     this.isMultiselect.set(false);
-    this.cdr.markForCheck();
-    this.remeasureViewport();
   }
 
   getSelectedItems(): Recording[] {
-    return this.sortedItems().filter(r => this.selectedUris().has(r.audioUri));
+    return this.sortedItems().filter(r => r.selected);
   }
 
-  protected setSearch(value: string): void {
-    if (this.searchValue() === value) return;
-    this.resetListInteraction();
-    this.searchValue.set(value);
-    this.scrollViewport()?.scrollToIndex(0);
-    this.remeasureViewport();
+  /**
+   * Show/hide the searchbar and set focus to search field
+   */
+  toggleSearchBar() {
+    this.isSearch.update(v => !v);
+    if (this.isSearch()) {
+      setTimeout(() => this.searchBar?.()?.setFocus(), 50);
+    }
   }
 
-  protected resetFilters(): void {
-    this.resetListInteraction();
+  clearFilter() {
     this.searchValue.set('');
-    this.directionFilter.set('all');
-    this.scrollViewport()?.scrollToIndex(0);
-    this.remeasureViewport();
+    this.isSearch.set(false);
+    // this.updateFilter();
   }
 
-  clearFilter(): void {
-    this.searchValue.set('');
+  protected setCallFilter(filter: CallFilter) {
+    if (this.callFilter() === filter) return;
+    this.detailGroupKey.set(undefined);
+    this.clearSelection();
+    this.callFilter.set(filter);
+    this.scrollViewport()?.scrollToIndex(0);
+  }
+
+  protected filterLabel(label: { zh: string; en: string }): string {
+    return this.isZh ? label.zh : label.en;
+  }
+
+  protected sourceLabel(item: Recording): string {
+    return callSourceLabel(item);
+  }
+
+  protected callerLabel(item: Recording): string {
+    if (isVoipRecording(item)) {
+      return `${callSourceLabel(item)} · ${this.isZh ? '语音通话' : 'voice call'}`;
+    }
+    return item.opName || item.opNumber;
+  }
+
+  protected isNewDay(item: Recording, index: number): boolean {
+    if (this.settings.recordingsSortMode !== SortModeEnum.Date_ASC &&
+        this.settings.recordingsSortMode !== SortModeEnum.Date_DESC) return false;
+    return index === 0 || localDayKey(item.date) !== localDayKey(this.items()[index - 1]?.date ?? Number.NaN);
+  }
+
+  protected dayLabel(item: Recording): string {
+    if (!Number.isFinite(item.date) || item.date <= 0) return '';
+    const day = localDayKey(item.date);
+    const today = localDayKey(Date.now());
+    const yesterday = localDayKey(Date.now() - 86400000);
+    if (day === today) return this.isZh ? '今天' : 'Today';
+    if (day === yesterday) return this.isZh ? '昨天' : 'Yesterday';
+    return new Intl.DateTimeFormat(this.isZh ? 'zh-CN' : undefined,
+      { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(item.date));
+  }
+
+  protected openDetails(item: Recording) {
+    if (this.isMultiselect()) {
+      const group = this.groups().get(this.getGroupKey(item)) ?? [item];
+      const next = !group.every(record => record.selected);
+      group.forEach(record => record.selected = next);
+      this.cdr.markForCheck();
+      return;
+    }
+    this.detailGroupKey.set(this.getGroupKey(item));
+  }
+
+  protected closeDetails() {
+    this.detailGroupKey.set(undefined);
+  }
+
+  protected async playFromDetails(item: Recording) {
+    this.closeDetails();
+    if (this.selectedItem() !== item) await this.onItemClick(item);
+    this.cdr.detectChanges();
+    try {
+      await untilTrue(
+        () => this.player()?.recording() === item && this.player()!.isReady(),
+        100, 8000,
+      );
+      await this.player()?.play();
+    } catch (error) {
+      this.mbs.showError({ error });
+    }
+  }
+
+  protected async togglePlayback() {
+    await this.player()?.togglePlayPause();
+  }
+
+  protected closePlayer() {
+    void this.player()?.pause();
+    this.selectedItem.set(undefined);
+    this.recordingsService.recordings().forEach(r => r.selected = false);
+    this.playerExpanded.set(false);
+  }
+
+  /** Toggle expansion for a contact group. */
+  protected toggleExpand(groupKey: string) {
+    if (this.expandedGroupKey() === groupKey) {
+      const selected = this.selectedItem();
+      if (selected && this.getGroupKey(selected) === groupKey && !this.isGroupHeader(selected)) {
+        this.clearSelection();
+      }
+      this.expandedGroupKey.set(undefined);
+    } else {
+      this.expandedGroupKey.set(groupKey);
+    }
+  }
+
+  protected onCardClick(item: Recording) {
+    this.openDetails(item);
   }
 
   /**
@@ -594,15 +410,34 @@ export class MainPage implements AfterViewInit, OnDestroy {
    * Change selected status
    */
   async onItemClick(item: Recording) {
-    await this.selectAndPlay(item);
+
+    if (item.selected) {
+      this.selectedItem.set(undefined);
+      // if (this.isMultiselect()) {
+        item.selected = false;
+      // disable multiselection if no element is still selected
+      if (this.isMultiselect() && !this.getSelectedItems().length) {
+        this.isMultiselect.set(false);
+      }
+    }
+    else {
+      if (!this.isMultiselect()) {
+        this.clearSelection();
+      }
+      item.selected = true;
+      this.selectedItem.set(item);
+      // Never scroll to a dynamically expanded card: the list has fixed-height rows.
+      this.playerExpanded.set(false);
+    }
+
   }
 
   /**
    * Deletes the given recording file (and its companion JSON metadata)
    */
   async deleteItems(items: Recording[]) {
-    if (!items.length) return;
-    await this.player()?.pause();
+
+    this.player()?.pause();
 
     // show confirmation alert
     await this.mbs.showConfirm({
@@ -612,9 +447,8 @@ export class MainPage implements AfterViewInit, OnDestroy {
       onConfirm: async () => {
         // forcibly unload audio
         await this.player()?.unload();
-        await this.recordingsService.deleteRecording(items);
+        this.recordingsService.deleteRecording(items);
         this.clearSelection();
-        this.remeasureViewport();
       }
     });
 
@@ -758,17 +592,14 @@ export class MainPage implements AfterViewInit, OnDestroy {
    * Select all items
    */
   async selectAll() {
-    // Group headers and virtualized children represent the same full source.
-    this.clearSelection();
     this.isMultiselect.set(true);
-    this.selectedUris.set(new Set(this.sortedItems().map(item => item.audioUri)));
-    this.cdr.markForCheck();
+    this.sortedItems().forEach(i => i.selected = true);
   }
 
   /**
    * Show Android share dialog to share an audio file
    */
-  async shareRecording(item: Recording, _event?: MouseEvent) {
+  async shareRecording(item: Recording, event: MouseEvent) {
 
     // stop player
     await this.stopPlayer();
@@ -807,24 +638,14 @@ Duration: ${this.toHms.transform(item.duration)}
    * Start multiselection and select the given item
    */
   protected startMultiselection(item?: Recording) {
-    if (this.isMultiselect()) return;
-    this.clearSelection();
-    this.isMultiselect.set(true);
-    // Original long-press starts with the touched recording only; tapping
-    // a group header while in multi-select can still select its whole group.
-    this.selectedUris.set(new Set(item ? [item.audioUri] : []));
-    this.cdr.markForCheck();
-  }
-
-  protected invertSelection(): void {
-    if (!this.isMultiselect()) return;
-    this.selectedUris.update(old => invertRecordingSelection(old, this.sortedItems()));
-    this.cdr.markForCheck();
-  }
-
-  protected deselectAll(): void {
-    this.selectedUris.set(new Set());
-    this.cdr.markForCheck();
+    if (!this.isMultiselect()) {
+      this.clearSelection();
+      this.isMultiselect.set(true);
+      if (item) {
+        const group = this.groups().get(this.getGroupKey(item)) ?? [item];
+        group.forEach(record => record.selected = true);
+      }
+    }
   }
 
   /**
@@ -832,7 +653,6 @@ Duration: ${this.toHms.transform(item.duration)}
    */
   onScroll(index: number) {
     this.topIndex = index;
-    this.onViewportScroll();
   }
 
   /**
@@ -846,20 +666,18 @@ Duration: ${this.toHms.transform(item.duration)}
    * Skip to previous/next item
    */
   protected onSkip(direction: SkipDirection) {
-    // Like a media player, previous resets after 3 seconds; otherwise skip.
-    if (direction === 'prev' && (this.player()?.currentPosition() ?? 0) >= 3) {
-      void this.player()?.seekTo(0);
-      return;
-    }
-    // Navigate the complete filtered history, never only collapsed summaries.
-    const selectedItemIndex = this.sortedItems().findIndex(i => i === this.selectedItem());
+    // find first selected item index
+    const selectedItemIndex = this.sortedItems().findIndex(i => i.selected);
     if (selectedItemIndex >= 0) {
       const newSelectedItem = this.sortedItems()[selectedItemIndex + (direction === 'next' ? +1 : -1)];
       if (newSelectedItem) {
-        void this.selectAndPlay(newSelectedItem);
+        this.onItemClick(newSelectedItem);
       }
     }
   }
 
+  protected trackByUri(idx: number, item: Recording) {
+    return item.audioUri;
+  }
 
 }

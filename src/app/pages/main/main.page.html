@@ -1,119 +1,185 @@
-<app-header [title]="version.appName" [actionButtons]="actionButtons" [showCustomContent]="isMultiselect()">
+<app-header
+  [title]="version.appName"
+  [actionButtons]="actionButtons"
+  [showCustomContent]="isMultiselect()"
+>
   <ion-buttons slot="start">
-    <ion-button (click)="clearSelection()" [attr.aria-label]="i18n.get('HISTORY_CANCEL_SELECTION')">
+    <ion-button (click)="clearSelection()" aria-label="Cancel selection">
       <ion-icon name="close" slot="icon-only" />
     </ion-button>
   </ion-buttons>
   <ion-buttons slot="end">
-    <ion-label class="selection-count">{{ i18n.get('HISTORY_SELECTED', selectedCount()) }}</ion-label>
-    <ion-button (click)="selectAll()" [attr.aria-label]="i18n.get('LBL_SELECTALL')">
+    <ion-button (click)="selectAll()" aria-label="Select all">
       <ion-icon src="/assets/icons/select-all.svg" slot="icon-only" />
     </ion-button>
-    <ion-button (click)="deleteItems(getSelectedItems())" [disabled]="selectedCount() === 0"
-      [attr.aria-label]="i18n.get('HISTORY_DELETE_SELECTED')">
+    <ion-button (click)="deleteItems(getSelectedItems())" aria-label="Delete selected">
       <ion-icon name="trash" slot="icon-only" />
     </ion-button>
-    <ion-button id="history-selection-more" [attr.aria-label]="i18n.get('MAINMENU_MENU_TITLE')">
-      <ion-icon name="ellipsis-vertical" slot="icon-only" />
-    </ion-button>
-    <ion-popover trigger="history-selection-more" [dismissOnSelect]="true">
-      <ng-template>
-        <ion-list lines="none">
-          <ion-item button (click)="invertSelection()">
-            <ion-icon name="swap-horizontal-outline" slot="start" />
-            <ion-label>{{ i18n.get('HISTORY_INVERT_SELECTION') }}</ion-label>
-          </ion-item>
-          <ion-item button (click)="deselectAll()" [disabled]="selectedCount() === 0">
-            <ion-icon name="remove-circle-outline" slot="start" />
-            <ion-label>{{ i18n.get('HISTORY_DESELECT_ALL') }}</ion-label>
-          </ion-item>
-        </ion-list>
-      </ng-template>
-    </ion-popover>
   </ion-buttons>
 </app-header>
 
-<app-history-controls [search]="searchValue()" [direction]="directionFilter()" [total]="indexedCount()"
-  [contactCount]="groupCount()" [matches]="historyIntegrity().sourceCount"
-  [hasFilter]="!!searchValue() || directionFilter() !== 'all'"
-  [allRecordings]="showAllRecordings()" [refreshing]="isRefreshing()" [sortMode]="sortMode()"
-  (searchChange)="setSearch($event)" (resetAll)="resetFilters()"
-  (sortChange)="setSortMode($event)" (directionChange)="setDirectionFilter($event)" (toggleView)="toggleViewMode()"
-  (refresh)="refreshFromToolbar()" />
+@if (isSearch()) {
+  <ion-toolbar>
+    <ion-searchbar #searchBar
+      show-clear-button="focus"
+      [debounce]="500"
+      [(ngModel)]="searchValue"
+      [placeholder]="'LBL_SEARCH' | translatePipe"
+      (ionClear)="clearFilter()"
+    />
+  </ion-toolbar>
+}
 
-<ion-content id="main-content" class="ion-padding main-content" [scrollY]="false"
-  [class.disabled]="recordingsService.refreshProgress()">
-  <ion-refresher slot="fixed" [disabled]="topIndex > 0 || isRefreshing()"
-    pullFactor=".5" pullMin="60" pullMax="120" (ionRefresh)="refreshList($any($event))">
-    <ion-refresher-content pullingIcon="refresh"
-      [pullingText]="i18n.get('HOME_PULL_TO_REFRESH')"
-      refreshingSpinner="circles" [refreshingText]="i18n.get('HOME_REFRESHING')" />
-  </ion-refresher>
+<div class="call-filters" role="group" aria-label="Call type">
+  @for (filter of filterLabels; track filter.key) {
+    <button type="button" class="filter-chip"
+      [class.active]="callFilter() === filter.key"
+      [attr.aria-pressed]="callFilter() === filter.key"
+      (click)="setCallFilter(filter.key)">
+      {{ filterLabel(filter) }}
+    </button>
+  }
+</div>
 
+<ion-content id="main-content" class="main-content" [scrollY]="false"
+  [class.disabled]="recordingsService.refreshProgress() !== undefined">
   <div class="content-wrapper">
-    <ion-list class="items" lines="full" [class.multiselect]="isMultiselect()">
+    <ion-list class="items" lines="none">
+      @if (topIndex === 0) {
+        <ion-refresher slot="fixed" (ionRefresh)="refreshList($any($event))">
+          <ion-refresher-content refreshingSpinner="circles" />
+        </ion-refresher>
+      }
+
       <cdk-virtual-scroll-viewport #vsv class="virtual-scroll-viewport ion-content-scroll-host"
-        [historyVariableScroll]="displayRows()"
-        (scrolledIndexChange)="onScroll($event)" (scroll)="onViewportScroll()">
-        <ng-container *cdkVirtualFor="let entry of displayRows(); trackBy: trackByDisplayRow">
-          @if (entry.kind === 'recording') {
-            <app-history-recording-row
-              [style.height.px]="entry.height"
-              [recording]="entry.recording"
-              [isHeader]="!entry.isChild"
-              [groupCount]="showAllRecordings() ? 1 : getGroupCount(entry.recording)"
-              [expanded]="expandedGroupKey() === getGroupKey(entry.recording)"
-              [selected]="rowSelected(entry.recording)" [partial]="rowPartSelected(entry.recording)"
-              [groupSelected]="groupFullySelected(entry.recording)"
-              [playing]="isRowPlaying(entry.recording)"
-              [multiselect]="isMultiselect()"
-              [dialUri]="isDialableNumber(entry.recording) ? getDialUri(entry.recording) : null"
-              (opened)="onRowClick(entry.recording)" (playClicked)="onPlayRow(entry.recording)"
-              (expandedClicked)="toggleGroup(entry.recording)"
-              (groupSelectClicked)="toggleGroupSelection(entry.recording)"
-              (longPressed)="startMultiselection(entry.recording)"
-              (edit)="editItem(entry.recording)"
-              (share)="shareRecording(entry.recording)"
-              (delete)="deleteItems([entry.recording])" />
+        [itemSize]="itemHeight" (scrolledIndexChange)="onScroll($event)">
+
+        <div class="call-row" *cdkVirtualFor="let item of items(); let index = index; trackBy: trackByUri"
+          [class.selected]="item.selected"
+          [class.batch-mode]="isMultiselect()"
+          (click)="openDetails(item)"
+          longPress (longPress)="startMultiselection(item)"
+          role="button" tabindex="0"
+          (keydown.enter)="openDetails(item)"
+          (keydown.space)="openDetails(item); $event.preventDefault()">
+          <div class="avatar"><ion-icon name="person-outline" /></div>
+          <div class="call-summary">
+            <div class="row-top">
+              <span class="caller-name">{{ callerLabel(item) }}</span>
+              @if (getGroupCount(item) > 1) {
+                <span class="group-count">{{ getGroupCount(item) }}</span>
+              }
+            </div>
+            <div class="row-meta">
+              <app-call-icon class="call-direction-icon" [direction]="item.direction ?? ''" />
+              @if (sourceLabel(item)) {
+                <span class="source-label">{{ sourceLabel(item) }}</span>
+              }
+              <span class="call-time">{{ item.date | datetime }}</span>
+              @if (item.duration) { <span>· {{ item.duration | toHms }}</span> }
+            </div>
+            @if (isNewDay(item, index)) {
+              <div class="day-label">{{ dayLabel(item) }}</div>
+            }
+          </div>
+          @if (!isMultiselect()) {
+            <button type="button" class="row-play" (click)="playFromDetails(item); $event.stopPropagation()"
+              [attr.aria-label]="callHistoryLabels.play">
+              <ion-icon name="play-circle-outline" />
+            </button>
+          } @else {
+            <ion-icon class="selection-icon" [name]="item.selected ? 'checkbox' : 'square-outline'" />
           }
-        </ng-container>
+          <ion-icon name="chevron-forward-outline" class="row-chevron" />
+        </div>
       </cdk-virtual-scroll-viewport>
       <app-virtual-scrollbar class="virtual-scrollbar" [virtualScrollViewport]="vsv" />
-      @if (items().length === 0) {
-        <div class="history-empty" role="status" aria-live="polite">
-          @if (initializing() || isRefreshing()) {
-            <strong>{{ i18n.get('HISTORY_LOADING') }}</strong>
-            <span>{{ i18n.get('HISTORY_INDEXING') }}</span>
-          } @else if (recordingsService.lastRefreshError()) {
-            <strong>{{ i18n.get('HISTORY_LOAD_ERROR') }}</strong>
-            <span>{{ recordingsService.lastRefreshError() }}</span>
-            <button type="button" (click)="refreshFromToolbar()">{{ i18n.get('HISTORY_RETRY') }}</button>
-          } @else if (!settings.recordingsDirectoryUri) {
-            <strong>{{ i18n.get('HISTORY_NO_DIRECTORY') }}</strong>
-            <span>{{ i18n.get('HISTORY_NO_DIRECTORY_HELP') }}</span>
-          } @else if (indexedCount() === 0) {
-            <strong>{{ i18n.get('HISTORY_NO_RECORDINGS') }}</strong>
-            <span>{{ i18n.get('HISTORY_NO_RECORDINGS_HELP') }}</span>
-          } @else {
-            <strong>{{ i18n.get('HISTORY_NO_MATCHES') }}</strong>
-            <span>{{ i18n.get('HISTORY_NO_MATCHES_HELP') }}</span>
-            <button type="button" (click)="resetFilters()">{{ i18n.get('HISTORY_CLEAR_FILTERS') }}</button>
-          }
-        </div>
-      }
-      @if (items().length > 0 && recordingsService.lastRefreshError() && !isRefreshing()) {
-        <div class="history-scan-warning" role="status">
-          {{ i18n.get('HISTORY_SCAN_FAILED') }}
-          <button type="button" (click)="refreshFromToolbar()">{{ i18n.get('HISTORY_RETRY') }}</button>
+
+      @if (items().length === 0 && recordingsService.refreshProgress() === undefined) {
+        <div class="empty-list">
+          <ion-icon name="call-outline" />
+          <p>{{ callHistoryLabels.empty }}</p>
         </div>
       }
     </ion-list>
 
     @if (selectedItem() && !isMultiselect()) {
-      <!-- The original full-size player UI is already identical to upstream.
-           The native transport/retry logic remains on the current engine. -->
-      <app-audio-player #audioPlayer class="player" [recording]="selectedItem()!"
-        (onSkip)="onSkip($event)" />
+      <div class="mini-player" role="group" aria-label="Recording player">
+        <button type="button" class="mini-player-title"
+          (click)="playerExpanded.set(!playerExpanded())">
+          <ion-icon name="musical-notes-outline" />
+          <span class="mini-player-text">
+            <strong>{{ selectedItem()?.opName || callHistoryLabels.audio }}</strong>
+            <small>{{ selectedItem()!.date | datetime }}</small>
+          </span>
+          <ion-icon [name]="playerExpanded() ? 'chevron-down' : 'chevron-up'" />
+        </button>
+        <button type="button" class="mini-action" (click)="togglePlayback()"
+          [disabled]="!player()?.isReady()" [attr.aria-label]="callHistoryLabels.play">
+          <ion-icon [name]="player()?.isPlaying() ? 'pause' : 'play'" />
+        </button>
+        <button type="button" class="mini-action" (click)="closePlayer()" aria-label="Close player">
+          <ion-icon name="close" />
+        </button>
+      </div>
+      <div class="player-panel" [class.collapsed]="!playerExpanded()">
+        <app-audio-player #audioPlayer
+          class="player"
+          [recording]="selectedItem()!"
+          (onSkip)="onSkip($event)" />
+      </div>
     }
   </div>
 </ion-content>
+
+<!-- Details are separate from the virtual list so row heights never change. -->
+<ion-modal [isOpen]="detailGroupKey() !== undefined"
+  [initialBreakpoint]="0.72" [breakpoints]="[0, 0.72, 1]"
+  (didDismiss)="closeDetails()">
+  <ng-template>
+    <ion-header>
+      <ion-toolbar>
+        <ion-title>{{ detailHeading() }}</ion-title>
+        <ion-buttons slot="end">
+          <ion-button (click)="closeDetails()" aria-label="Close call details">
+            <ion-icon name="close" slot="icon-only" />
+          </ion-button>
+        </ion-buttons>
+      </ion-toolbar>
+    </ion-header>
+    <ion-content>
+      <ion-list lines="inset">
+        @for (entry of detailRecords(); track entry.audioUri) {
+          <ion-item class="history-record">
+            <app-call-icon slot="start" [direction]="entry.direction" />
+            <ion-label>
+              <h2>{{ entry.date | datetime }}</h2>
+              <p>{{ entry.duration | toHms }} · {{ entry.filesize | filesize }}
+                @if (sourceLabel(entry)) { · {{ sourceLabel(entry) }} }
+              </p>
+              @if (isDialableNumber(entry)) {
+                <p><a [href]="getDialUri(entry)" (click)="$event.stopPropagation()">{{ entry.opNumber }}</a></p>
+              }
+            </ion-label>
+            <ion-button fill="clear" slot="end" (click)="playFromDetails(entry)"
+              [attr.aria-label]="callHistoryLabels.play">
+              <ion-icon name="play-circle-outline" slot="icon-only" />
+            </ion-button>
+            <ion-button fill="clear" slot="end" (click)="editItem(entry)"
+              [attr.aria-label]="callHistoryLabels.edit">
+              <ion-icon name="pencil-outline" slot="icon-only" />
+            </ion-button>
+            <ion-button fill="clear" slot="end" (click)="shareRecording(entry, $event)"
+              [attr.aria-label]="callHistoryLabels.share">
+              <ion-icon name="share-social-outline" slot="icon-only" />
+            </ion-button>
+            <ion-button fill="clear" color="danger" slot="end" (click)="deleteItems([entry])"
+              [attr.aria-label]="callHistoryLabels.delete">
+              <ion-icon name="trash-outline" slot="icon-only" />
+            </ion-button>
+          </ion-item>
+        }
+      </ion-list>
+    </ion-content>
+  </ng-template>
+</ion-modal>
