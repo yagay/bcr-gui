@@ -124,3 +124,25 @@ The current flat history UI retains the old functional controls:
   independent Suite SAF DB indexing.
 - CI continues to build **Debug only** on this feature branch, and structural
   checks fail if a former feature is removed by a future layout change.
+
+## Variable-height history layout parity (November 2026)
+
+This revision corrects the remaining layout mismatch without reintroducing the
+old card-in-fixed-CDK-row overflow. A standalone variable-size scroll strategy
+uses a prefix-sum table of **physical row heights**, and renders only the
+visible range plus a 600px buffer. Main contact cards are 80px, child calls
+48px, an expanded detail row 170px, and an inline player 90px; no two rows
+occupy the same physical area.
+
+The selected file's detail panel now follows the corresponding list entry,
+restoring the original selection hierarchy and keeping edit/share/delete
+actions with that recording. Playback follows the details; when scrolled out
+of view, a compact bottom playback dock keeps the same single native engine
+accessible. The toolbar's filter chips remain visible while sorting, counts
+and view mode move into one optional row. The multiselection toolbar keeps
+select-all/delete and puts invert/deselect in its overflow menu.
+
+The original recording reader, database, BCR's own settings and BCR core are
+unchanged. Debug-only CI checks the structural parity and executes variable
+height/scroll/29-record integrity tests; actual touch behaviour still requires
+on-device checking.

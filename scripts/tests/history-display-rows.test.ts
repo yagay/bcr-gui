@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildDisplayRows, actionRecords, selectionState, setGroupSelection,
   invertRecordingSelection, inlineRowOnScreen, callHistoryDateLabel,
+  HISTORY_ROW_HEIGHT, historyRowOffsets, historyIndexAtOffset,
 } from '../../src/app/features/recording-groups/history-display-rows.ts';
 import type { Recording } from '../../src/app/models/recording';
 
@@ -100,4 +101,42 @@ test('VoIP detection recognizes BCR folder provenance and supported audio format
   assert.equal(isVoipRecording(make('', '20261104_120000_signal.wav')), true);
   assert.equal(isVoipRecording(make('', 'call.wav')), false);
   assert.equal(isVoipRecording(make('', 'not-audio_whatsapp.txt')), false);
+});
+
+test('variable-height history is pixel-accurate and never overlays a neighbouring call', () => {
+  const records = [call(0), call(1), call(2)];
+  const display = buildDisplayRows(records, records[1].audioUri, {
+    isChild: record => record === records[1],
+    showDetails: true,
+  });
+  assert.deepEqual(display.map(x => x.kind), [
+    'recording','recording','detail','player','recording',
+  ]);
+  assert.deepEqual(display.map(x => x.height), [
+    HISTORY_ROW_HEIGHT.contact,HISTORY_ROW_HEIGHT.child,
+    HISTORY_ROW_HEIGHT.detail,HISTORY_ROW_HEIGHT.player,HISTORY_ROW_HEIGHT.contact,
+  ]);
+  const offsets = historyRowOffsets(display);
+  assert.deepEqual(offsets, [0,80,128,298,388,468]);
+  assert.equal(historyIndexAtOffset(offsets,0),0);
+  assert.equal(historyIndexAtOffset(offsets,79),0);
+  assert.equal(historyIndexAtOffset(offsets,80),1);
+  assert.equal(historyIndexAtOffset(offsets,127),1);
+  assert.equal(historyIndexAtOffset(offsets,128),2);
+  assert.equal(historyIndexAtOffset(offsets,298),3);
+  assert.equal(historyIndexAtOffset(offsets,100000),4);
+  assert.equal(inlineRowOnScreen(display,records[1].audioUri,250,200,78),true);
+  assert.equal(inlineRowOnScreen(display,records[1].audioUri,300,200,78),false);
+  assert.equal(inlineRowOnScreen(display,records[1].audioUri,0,250,78),false);
+});
+test('details and player appear directly after the selected historical child', () => {
+  const records = [call(0),call(1),call(2)];
+  const rows = buildDisplayRows(records, records[2].audioUri, {
+    isChild: record=>record!==records[0],showDetails:true,
+  });
+  assert.deepEqual(rows.map(r=>r.key),[
+    records[0].audioUri,records[1].audioUri,records[2].audioUri,
+    'detail:'+records[2].audioUri,'player:'+records[2].audioUri,
+  ]);
+  assert.equal(rows.filter(r=>r.kind==='recording').length,3);
 });
