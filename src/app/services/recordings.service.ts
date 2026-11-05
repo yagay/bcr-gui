@@ -28,6 +28,7 @@ export class RecordingsService {
   private lastUpdate: number = 0;
   /** null = no VoIP folder; undefined = subfolder not resolved this session. */
   private voipDirectoryUri: string | null | undefined = undefined;
+  private lastFullScan = 0;
 
   // reference to main page (if active)
   public mainPageRef?: MainPage = undefined;
@@ -95,9 +96,13 @@ export class RecordingsService {
     this.refreshProgress.set(0.001);
     console.log("Reading files in folder:");
 
-    // get a phone numbers map
-    // find contact with that phone number
-    const pnm = await this.contactsService.getPhoneNumbersMap();
+    // Contact access is optional: a permission/provider failure must not hide audio.
+    let pnm: Awaited<ReturnType<ContactsService['getPhoneNumbersMap']>> | undefined;
+    try {
+      pnm = await this.contactsService.getPhoneNumbersMap();
+    } catch (error) {
+      console.warn('Contact lookup unavailable; indexing recordings without names:', error);
+    }
 
     // filename RegExp parser instance
     const filenameRegExp = Recording.getFilenameRegExp(this.settings.filenamePattern);
@@ -110,39 +115,57 @@ export class RecordingsService {
     ));
 
     try {
-      // Only scan the selected root + the BCR experimental VoIP child directory.
-      // This deliberately avoids expensive or surprising recursive SAF traversal.
-      const rootEntries = await AndroidSAFUtils.listFiles({
-        directoryUri: this.settings.recordingsDirectoryUri,
-      });
-      const voipDir = rootEntries.find(f => f.isDirectory && f.displayName === 'VoIP');
-      this.voipDirectoryUri = voipDir?.uri ?? null;
-      let voipEntries: typeof rootEntries = [];
-      if (voipDir) {
+      // SAF providers may return generic audio MIME types and nested folders.
+      // Scan subfolders, but avoid loops and keep cached results after partial failures.
+      const indexedFiles: Array<{ file: Awaited<ReturnType<typeof AndroidSAFUtils.listFiles>>[number]; folder: string }> = [];
+      const visited = new Set<string>();
+      let scanIncomplete = false;
+      const scan = async (directoryUri: string, folder: string, depth: number): Promise<void> => {
+        if (visited.has(directoryUri)) return;
+        visited.add(directoryUri);
+        let entries: Awaited<ReturnType<typeof AndroidSAFUtils.listFiles>>;
         try {
-          voipEntries = await AndroidSAFUtils.listFiles({ directoryUri: voipDir.uri });
+          entries = await AndroidSAFUtils.listFiles({ directoryUri });
         } catch (error) {
-          // The root directory still works if the child has transient SAF errors.
-          console.warn('Cannot scan VoIP recordings directory:', error);
+          if (!folder) throw error;
+          scanIncomplete = true;
+          console.warn('Cannot scan recording subfolder:', folder, error);
+          return;
         }
-      }
-      const indexedFiles = [
-        ...rootEntries.filter(f => !f.isDirectory).map(file => ({ file, folder: '' })),
-        ...voipEntries.filter(f => !f.isDirectory).map(file => ({ file, folder: 'VoIP' })),
-      ];
+        if (!folder) {
+          this.voipDirectoryUri = entries.find(f => f.isDirectory && f.displayName === 'VoIP')?.uri ?? null;
+        }
+        for (const file of entries) {
+          if (file.isDirectory) {
+            if (depth < 8) {
+              await scan(file.uri, folder ? `${folder}/${file.displayName}` : file.displayName, depth + 1);
+            } else {
+              scanIncomplete = true;
+              console.warn('Recording folder nesting limit reached:', file.displayName);
+            }
+          } else {
+            indexedFiles.push({ file, folder });
+          }
+        }
+      };
+      await scan(this.settings.recordingsDirectoryUri, '', 0);
       const fileKey = (name: string, folder: string) =>
         folder ? `${folder}/${name}` : name;
       const audioFilesObj = Object.fromEntries(indexedFiles
-        .filter(({file}) => this.settings.supportedTypes.includes(file.type))
+        .filter(({file}) => {
+          const extension = /\.(flac|m4a|mp4|mp3|ogg|oga|opus|wav|wave|amr|awb|3gp|3gpp|3ga|aac|webm)$/i.test(file.displayName);
+          const mime = (file.type || '').toLowerCase();
+          return extension || this.settings.supportedTypes.includes(mime) || mime.startsWith('audio/');
+        })
         .map(({file, folder}) => [fileKey(file.displayName, folder), file]));
       const metadataFilesObj = Object.fromEntries(indexedFiles
-        .filter(({file}) => file.displayName.endsWith('.json'))
+        .filter(({file}) => /\.json$/i.test(file.displayName))
         .map(({file, folder}) => [fileKey(file.displayName, folder), file]));
 
       // STEP 1: remove deleted files from DB
       // ------------------------------------
       Object.keys(currentDbObj)
-        .filter(fn => !(fn in audioFilesObj))
+        .filter(fn => !scanIncomplete && !(fn in audioFilesObj))
         .forEach(fn => {
           delete currentDbObj[fn];
         }
@@ -156,7 +179,7 @@ export class RecordingsService {
       if (count > 0) {
         let i = 0;
         for (const [key, file] of Object.entries(audioFilesObj)) {
-          const sourceFolder = key.startsWith('VoIP/') ? 'VoIP' : '';
+          const sourceFolder = key.slice(0, Math.max(0, key.lastIndexOf('/')));
 
           // send progress update
           this.refreshProgress.set(++i / count);
@@ -164,7 +187,7 @@ export class RecordingsService {
           // compose metadata .json filename
           const metadataFileName = replaceExtension(file.displayName, '.json');
           const metadataFile = metadataFilesObj[
-            sourceFolder ? `VoIP/${metadataFileName}` : metadataFileName
+            sourceFolder ? `${sourceFolder}/${metadataFileName}` : metadataFileName
           ];
 
           // check if current audio file already exists in current DB (compare display names)
@@ -181,7 +204,13 @@ export class RecordingsService {
           }
           else {
             // add new element to DB
-            dbRecord = await Recording.createInstance(file, metadataFile, filenameRegExp);
+            try {
+              dbRecord = await Recording.createInstance(file, metadataFile, filenameRegExp);
+            } catch (error) {
+              // One bad metadata/audio entry must not abort the entire history scan.
+              console.warn('Cannot read recording metadata; using filename:', file.displayName, error);
+              dbRecord = await Recording.createInstance(file, undefined, filenameRegExp);
+            }
             dbRecord.sourceFolder = sourceFolder;
             currentDbObj[key] = dbRecord;
           }
@@ -191,7 +220,7 @@ export class RecordingsService {
               || (dbRecord.opName === UNKNOWN_NAME_OR_NUMBER && dbRecord.opNumber !== UNKNOWN_NAME_OR_NUMBER)
               || isPhoneNumber(dbRecord.opName)
           ) {
-            const displayName = pnm.getDisplayName(dbRecord.opNumber);
+            const displayName = pnm?.getDisplayName(dbRecord.opNumber);
             if (displayName) {
               dbRecord.opName = displayName;
             }
@@ -202,6 +231,8 @@ export class RecordingsService {
 
       // update collection & cache
       this.lastUpdate = new Date().getTime();
+      // A partial SAF scan must be retried rather than treated as complete.
+      this.lastFullScan = scanIncomplete ? 0 : this.lastUpdate;
       this.recordings.set(Object.values(currentDbObj));
       await this.save(false);
 
@@ -233,6 +264,8 @@ export class RecordingsService {
    */
   private async shallRefresh() {
     if (!this.settings.recordingsDirectoryUri) return false;
+    // Some SAF providers do not update directory timestamps when files change.
+    if (!this.lastFullScan || Date.now() - this.lastFullScan >= 60_000) return true;
     if (this.voipDirectoryUri === undefined) {
       // Resolve the child directory after loading a saved DB, without
       // eagerly reparsing every audio file on each application launch.
