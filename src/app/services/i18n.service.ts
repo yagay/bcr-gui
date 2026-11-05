@@ -139,6 +139,9 @@ export class I18nService {
       }
     }
 
+    // Report the actual loaded locale to consumers of this service.
+    this._currentCulture = cultureID;
+
     // store content
     Object.entries(content).forEach(([key, value]) => {
       localStorage.setItem(TRANSLATION_KEY_PREFIX + key, value);

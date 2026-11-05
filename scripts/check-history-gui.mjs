@@ -53,4 +53,44 @@ assert(controller.includes('initializing = signal(true)'), 'Initial load state m
 assert(page.includes('recordingsService.lastRefreshError()'), 'Scan failure must have a recovery state');
 assert(page.includes('(click)="invertSelection()"'), 'Bulk operations require invert selection');
 assert(page.includes('(click)="deselectAll()"'), 'Bulk operations require deselect all');
+
+// The flat layout must retain every public feature from the stable pre-refactor GUI.
+const datePipe = read('src/app/pipes/datetime.pipe.ts');
+const oldKeys = ['HOME_REC_PHONE_NUMBER', 'HOME_REC_TYPE', 'HOME_REC_SIZE'];
+for (const key of oldKeys) assert(details.includes(key), 'Original recording detail missing: ' + key);
+assert(row.includes('recording().date | datetime'),
+  'List dates must honor the user's date/time format settings');
+assert(details.includes('recording().date | datetime'),
+  'Detail dates must honor the user's date/time format settings');
+assert(datePipe.includes('this.settings.dateTimeFormat'),
+  'Configured date/time formats are no longer in use');
+assert(datePipe.includes('this.settings.culture'),
+  'Configured language no longer determines locale formatting');
+assert(inline.includes('<ion-range'), 'Restore Ionic range input with original pin/step behavior');
+assert(inline.includes('[pinFormatter]') && inline.includes('[snaps]'),
+  'Native Ionic time preview and snapped seeking must be retained');
+assert(page.includes('[actionButtons]="actionButtons"'),
+  'Original search icon in the header must be preserved');
+assert(controller.includes('this.historyControls()?.toggleSearch()'),
+  'Header search icon must open and focus the real search field');
+assert(controls.includes('nativeElement.focus()'),
+  'Opening search must focus the input');
+assert(page.includes("HOME_PULL_TO_REFRESH") && page.includes("HOME_REFRESHING"),
+  'Pull-to-refresh labels from the original localized interface are missing');
+assert(controller.includes('this.selectRecording(item);'),
+  'Tapping the group header must select its representative recording');
+assert(controller.includes('new Set(item ? [item.audioUri] : [])'),
+  'Long-press must initially select only the touched recording');
+assert(page.includes('(edit)="editItem(selectedItem()!)"'),
+  'The original edit contact/name/copy-number action sheet must stay reachable');
+for (const culture of ['en-US', 'zh-Hans', 'zh-Hant']) {
+  const translations = JSON.parse(read('src/assets/i18n/' + culture + '.json'));
+  for (const key of ['HISTORY_PLAY','HISTORY_SEARCH_HINT','HISTORY_SELECTED',
+    'HISTORY_REFRESH','HISTORY_UNKNOWN','HISTORY_PLAYER']) {
+    assert(typeof translations[key] === 'string' && translations[key].length,
+      culture + ' missing ' + key);
+  }
+}
+assert(!row.includes("navigator.language") && !controls.includes("navigator.language"),
+  'UI must not bypass the configured app language');
 console.log('Recording GUI architecture checks passed.');

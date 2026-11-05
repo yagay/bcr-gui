@@ -97,3 +97,30 @@ complete filtered source list, independent of CDK viewport rendering.
   contact selection, dates, and VoIP classification. Angular and APK builds
   still run in Actions; actual device scroll, gesture and audio behavior needs
   on-device validation.
+
+## Stable GUI feature parity restoration (November 2026)
+
+The current flat history UI retains the old functional controls:
+- Toolbar **search icon** opens the search input with keyboard focus. The
+  search/filter/sort model remains the new single history model.
+- Tapping a collapsed contact row **expands and selects** its representative
+  recording, matching the old behavior; the chevron only expands/collapses;
+  the separate play icon only controls playback. Long-press starts selection
+  on that one recording rather than implicitly selecting an entire group.
+- Recording details show full original phone number (clickable when dialable),
+  MIME type, file size, date and the existing edit-contact/name/copy-number
+  action sheet. The independent details dock stays outside the CDK viewport.
+- The original Ionic ion-range controller has a pin formatter, duration-aware
+  step, snapping and seek preview while dragging. The actual native audio
+  engine is still shared by both inline and collapsed views.
+- Row and detail dates use the original DatetimePipe and all saved
+  settings.dateTimeFormat options, including the custom format and 12/24-hour
+  preference. Language uses the app's I18nService translation resources, not
+  navigator.language. New labels are in en-US, zh-Hans and zh-Hant with
+  existing English fallbacks for other languages.
+- The pull-to-refresh control again exposes the original translated
+  instructions and pull distance; the toolbar refresh action also remains.
+- Native Suite-only BCR settings and GUI settings stay separate, with
+  independent Suite SAF DB indexing.
+- CI continues to build **Debug only** on this feature branch, and structural
+  checks fail if a former feature is removed by a future layout change.
