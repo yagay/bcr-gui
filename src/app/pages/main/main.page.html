@@ -41,15 +41,17 @@
   (sortChange)="setSortMode($event)" (directionChange)="setDirectionFilter($event)" (toggleView)="toggleViewMode()"
   (refresh)="refreshFromToolbar()" />
 
-<ion-content id="main-content" class="main-content" [scrollY]="false">
+<ion-content id="main-content" class="ion-padding main-content" [scrollY]="false"
+  [class.disabled]="recordingsService.refreshProgress()">
   <ion-refresher slot="fixed" [disabled]="topIndex > 0 || isRefreshing()"
     pullFactor=".5" pullMin="60" pullMax="120" (ionRefresh)="refreshList($any($event))">
     <ion-refresher-content pullingIcon="refresh"
       [pullingText]="i18n.get('HOME_PULL_TO_REFRESH')"
       refreshingSpinner="circles" [refreshingText]="i18n.get('HOME_REFRESHING')" />
   </ion-refresher>
-  <div class="history-layout">
-    <section class="history-list-area" [attr.aria-label]="i18n.get('HISTORY_RECORDINGS')">
+
+  <div class="content-wrapper">
+    <ion-list class="items" lines="full" [class.multiselect]="isMultiselect()">
       <cdk-virtual-scroll-viewport #vsv class="virtual-scroll-viewport ion-content-scroll-host"
         [historyVariableScroll]="displayRows()"
         (scrolledIndexChange)="onScroll($event)" (scroll)="onViewportScroll()">
@@ -65,29 +67,14 @@
               [groupSelected]="groupFullySelected(entry.recording)"
               [playing]="isRowPlaying(entry.recording)"
               [multiselect]="isMultiselect()"
+              [dialUri]="isDialableNumber(entry.recording) ? getDialUri(entry.recording) : null"
               (opened)="onRowClick(entry.recording)" (playClicked)="onPlayRow(entry.recording)"
               (expandedClicked)="toggleGroup(entry.recording)"
               (groupSelectClicked)="toggleGroupSelection(entry.recording)"
-              (longPressed)="startMultiselection(entry.recording)" />
-          } @else if (entry.kind === 'detail') {
-            <app-history-details class="inline-history-detail" [class.is-child]="!showAllRecordings() && !isGroupHeader(entry.recording)"
-              [style.height.px]="entry.height"
-              [recording]="entry.recording"
-              [dialUri]="isDialableNumber(entry.recording) ? getDialUri(entry.recording) : null"
-              (close)="clearSelection()" (edit)="editItem(entry.recording)"
-              (share)="shareRecording(entry.recording)" (delete)="deleteItems([entry.recording])" />
-          } @else {
-            <app-history-inline-player class="inline-history-player" [class.is-child]="!showAllRecordings() && !isGroupHeader(entry.recording)"
-              [style.height.px]="entry.height"
-              [position]="inlineProgress()" [duration]="inlineDuration()"
-              [playing]="inlinePlaying()" [ready]="inlineReady()" [failed]="inlineFailed()"
-              [speed]="playbackSpeed()" [seekSeconds]="settings.seekTime"
-              [canPrevious]="canSkip('prev')" [canNext]="canSkip('next')"
-              (preview)="previewSeek($event)" (seek)="seekInline($event)"
-              (previous)="onSkip('prev')" (next)="onSkip('next')"
-              (rewind)="seekRelative(-1)" (forward)="seekRelative(1)"
-              (toggle)="toggleInline()" (speedChange)="switchPlaybackSpeed()"
-              (dismiss)="clearSelection()" />
+              (longPressed)="startMultiselection(entry.recording)"
+              (edit)="editItem(entry.recording)"
+              (share)="shareRecording(entry.recording)"
+              (delete)="deleteItems([entry.recording])" />
           }
         </ng-container>
       </cdk-virtual-scroll-viewport>
@@ -120,26 +107,12 @@
           <button type="button" (click)="refreshFromToolbar()">{{ i18n.get('HISTORY_RETRY') }}</button>
         </div>
       }
-    </section>
-
-    @if (selectedItem() && !isMultiselect() && !inlinePlayerVisible()) {
-      <div class="collapsed-player-dock">
-        <app-history-inline-player
-          [position]="inlineProgress()" [duration]="inlineDuration()"
-          [playing]="inlinePlaying()" [ready]="inlineReady()" [failed]="inlineFailed()"
-          [speed]="playbackSpeed()" [seekSeconds]="settings.seekTime"
-          [canPrevious]="canSkip('prev')" [canNext]="canSkip('next')"
-          (preview)="previewSeek($event)" (seek)="seekInline($event)"
-          (previous)="onSkip('prev')" (next)="onSkip('next')"
-          (rewind)="seekRelative(-1)" (forward)="seekRelative(1)"
-          (toggle)="toggleInline()" (speedChange)="switchPlaybackSpeed()"
-          (dismiss)="clearSelection()" />
-      </div>
-    }
+    </ion-list>
 
     @if (selectedItem() && !isMultiselect()) {
-      <!-- The only native audio engine is persistent, never in a virtual row. -->
-      <app-audio-player #audioPlayer class="player-engine" [recording]="selectedItem()!"
+      <!-- The original full-size player UI is already identical to upstream.
+           The native transport/retry logic remains on the current engine. -->
+      <app-audio-player #audioPlayer class="player" [recording]="selectedItem()!"
         (onSkip)="onSkip($event)" />
     }
   </div>

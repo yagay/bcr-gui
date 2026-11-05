@@ -4,8 +4,6 @@ import { VirtualScrollbarComponent } from 'src/app/components/virtual-scrollbar/
 import { RecordingGroupsService } from 'src/app/features/recording-groups/recording-groups.service';
 import { HistoryRecordingRowComponent } from 'src/app/features/recording-groups/history-recording-row.component';
 import { HistoryControlsComponent } from 'src/app/features/recording-groups/history-controls.component';
-import { HistoryDetailsComponent } from 'src/app/features/recording-groups/history-details.component';
-import { HistoryInlinePlayerComponent } from 'src/app/features/recording-groups/history-inline-player.component';
 import { IonicBundleModule } from 'src/app/IonicBundle.module';
 import { Recording } from 'src/app/models/recording';
 import { DatetimePipe } from 'src/app/pipes/datetime.pipe';
@@ -45,8 +43,6 @@ import version from '../../version';
     IonicBundleModule,
     HistoryRecordingRowComponent,
     HistoryControlsComponent,
-    HistoryDetailsComponent,
-    HistoryInlinePlayerComponent,
     HistoryVariableScrollDirective,
     ScrollingModule,
     ToHmsPipe,
@@ -122,12 +118,13 @@ export class MainPage implements AfterViewInit, OnDestroy {
     this.items(),
     this.isMultiselect() ? undefined : this.selectedItem()?.audioUri,
     {
-      // Preserve the original contact/child hierarchy while CDK receives
-      // exact measured heights for each row. No overflow or spacer overlay.
+      // The original selected card contains its details, and the original
+      // full player lives in the grid below the list. Only data is new.
       isChild: item => !this.showAllRecordings() && !this.isGroupHeader(item),
       showDetails: !this.isMultiselect(),
+      inlineDetails: true,
+      showPlayer: false,
       detailHeight: HISTORY_ROW_HEIGHT.detail,
-      playerHeight: HISTORY_ROW_HEIGHT.player,
     },
   ));
   protected displayCount = computed(() => this.displayRows().length);

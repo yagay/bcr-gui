@@ -1,4 +1,6 @@
-import { ChangeDetectionStrategy, Component, ElementRef, inject, input, OnDestroy, output, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, OnDestroy, output, signal, viewChild } from '@angular/core';
+import { IonicBundleModule } from 'src/app/IonicBundle.module';
+import { IonSearchbar, SearchbarCustomEvent } from '@ionic/angular';
 import { I18nKey, I18nService } from 'src/app/services/i18n.service';
 import { SortModeEnum } from 'src/app/utils/recordings-sorter';
 
@@ -9,16 +11,14 @@ export type HistoryDirection = 'all' | 'in' | 'out' | 'voip';
   selector: 'app-history-controls',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [IonicBundleModule],
   template: `
     @if (searchVisible()) {
-      <div class="search-row">
-        <input #historySearch type="search" [value]="search()"
-          (input)="onSearchInput($event)"
-          [placeholder]="i18n.get('HISTORY_SEARCH_HINT')"
-          [attr.aria-label]="i18n.get('LBL_SEARCH')" />
-        <button type="button" class="reset" (click)="clearSearch()"
-          [attr.aria-label]="i18n.get('HISTORY_RESET_FILTERS')">×</button>
-      </div>
+      <ion-toolbar>
+        <ion-searchbar #historySearch [value]="search()" showClearButton="focus"
+          [debounce]="750" [placeholder]="i18n.get('LBL_SEARCH')"
+          (ionInput)="onIonicSearchInput($event)" (ionClear)="clearSearch()" />
+      </ion-toolbar>
     }
     @if (filtersVisible()) {
     <div class="filter-row">
@@ -113,7 +113,7 @@ export type HistoryDirection = 'all' | 'in' | 'out' | 'voip';
 })
 export class HistoryControlsComponent implements OnDestroy {
   protected readonly i18n = inject(I18nService);
-  private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('historySearch');
+  private readonly searchInput = viewChild<IonSearchbar>('historySearch');
   protected readonly searchVisible = signal(false);
   protected readonly filtersVisible = signal(false);
   public toggleFilters(): void {
@@ -140,17 +140,16 @@ export class HistoryControlsComponent implements OnDestroy {
   private searchDebounce?: ReturnType<typeof setTimeout>;
   public toggleSearch(): void {
     this.searchVisible.update(open => !open);
-    if (this.searchVisible()) setTimeout(() => this.searchInput()?.nativeElement.focus(), 50);
+    if (this.searchVisible()) setTimeout(() => void this.searchInput()?.setFocus(), 50);
   }
   protected clearSearch(): void {
     if (this.searchDebounce) clearTimeout(this.searchDebounce);
     this.searchChange.emit('');
     this.searchVisible.set(false);
   }
-  protected onSearchInput(event: Event): void {
-    const value = (event.target as HTMLInputElement).value;
-    if (this.searchDebounce) clearTimeout(this.searchDebounce);
-    this.searchDebounce = setTimeout(() => this.searchChange.emit(value), 230);
+  protected onIonicSearchInput(event: SearchbarCustomEvent): void {
+    // Ionic's upstream 750ms debounce is the sole text-input delay.
+    this.searchChange.emit(event.detail.value ?? '');
   }
   protected resetFilters(): void {
     if (this.searchDebounce) clearTimeout(this.searchDebounce);
