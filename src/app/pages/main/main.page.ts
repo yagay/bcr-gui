@@ -64,6 +64,9 @@ export class MainPage implements AfterViewInit {
   protected isSearch = signal(false);
   protected searchValue = signal('');
   protected callFilter = signal<CallFilter>('all');
+  /** Show every indexed file by default; grouping is an optional view. */
+  protected showEachRecording = signal(true);
+  protected detailRecordingUri = signal<string | undefined>(undefined);
   protected detailGroupKey = signal<string | undefined>(undefined);
   protected playerExpanded = signal(false);
   protected filterLabels = [
@@ -131,15 +134,29 @@ export class MainPage implements AfterViewInit {
     this.settings.defaultCountryPrefix,
   ));
 
-  // A fixed-height virtual list contains ONE summary per contact/number.
-  // Group history lives in a separate sheet: expanding never alters row height.
-  protected items = computed(() => sortRecordings(
-    Array.from(this.groups().values(), group => group[0]),
-    this.settings.recordingsSortMode,
-  ));
+  // Full history is the default; the original group-summary design remains
+  // selectable without changing scan data or the fixed 86px row UI.
+  protected items = computed(() => this.showEachRecording()
+    ? this.sortedItems()
+    : sortRecordings(Array.from(this.groups().values(), group => group[0]),
+      this.settings.recordingsSortMode));
+  protected indexedCount = computed(() => this.recordingsService.recordings().length);
+  protected filteredCount = computed(() => this.sortedItems().length);
+  protected groupCount = computed(() => this.groups().size);
+  protected toggleRecordView(): void {
+    this.detailGroupKey.set(undefined);
+    this.detailRecordingUri.set(undefined);
+    this.clearSelection();
+    this.showEachRecording.update(current => !current);
+    this.scrollViewport()?.scrollToIndex(0);
+  }
   protected detailRecords = computed(() => {
     const key = this.detailGroupKey();
-    return key ? (this.groups().get(key) ?? []) : [];
+    if (!key) return [];
+    const group = this.groups().get(key) ?? [];
+    if (!this.showEachRecording()) return group;
+    const selectedUri = this.detailRecordingUri();
+    return group.filter(record => record.audioUri === selectedUri);
   });
   protected detailHeading = computed(() => {
     const record = this.detailRecords()[0];
@@ -288,6 +305,7 @@ export class MainPage implements AfterViewInit {
   protected setCallFilter(filter: CallFilter) {
     if (this.callFilter() === filter) return;
     this.detailGroupKey.set(undefined);
+    this.detailRecordingUri.set(undefined);
     this.clearSelection();
     this.callFilter.set(filter);
     this.scrollViewport()?.scrollToIndex(0);
@@ -327,17 +345,20 @@ export class MainPage implements AfterViewInit {
 
   protected openDetails(item: Recording) {
     if (this.isMultiselect()) {
-      const group = this.groups().get(this.getGroupKey(item)) ?? [item];
-      const next = !group.every(record => record.selected);
-      group.forEach(record => record.selected = next);
+      const records = this.showEachRecording()
+        ? [item] : (this.groups().get(this.getGroupKey(item)) ?? [item]);
+      const next = !records.every(record => record.selected);
+      records.forEach(record => record.selected = next);
       this.cdr.markForCheck();
       return;
     }
+    this.detailRecordingUri.set(item.audioUri);
     this.detailGroupKey.set(this.getGroupKey(item));
   }
 
   protected closeDetails() {
     this.detailGroupKey.set(undefined);
+    this.detailRecordingUri.set(undefined);
   }
 
   protected async playFromDetails(item: Recording) {
@@ -642,8 +663,9 @@ Duration: ${this.toHms.transform(item.duration)}
       this.clearSelection();
       this.isMultiselect.set(true);
       if (item) {
-        const group = this.groups().get(this.getGroupKey(item)) ?? [item];
-        group.forEach(record => record.selected = true);
+        const records = this.showEachRecording()
+          ? [item] : (this.groups().get(this.getGroupKey(item)) ?? [item]);
+        records.forEach(record => record.selected = true);
       }
     }
   }

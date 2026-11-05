@@ -2,11 +2,13 @@ import { Recording } from 'src/app/models/recording';
 
 export type CallFilter = 'all' | 'in' | 'out' | 'voip';
 
-/** BCR's experimental VoIP capture names (not a generic call-log source). */
-const VOIP_FILE = /^bcr_\d{8}_\d{6}_(whatsapp|whatsapp-business|telegram|telegram-x|signal|viber|meet|wechat)\.wav$/i;
+/** Old BCR VoIP capture suffixes, with all supported audio codecs. */
+const VOIP_FILE = /^bcr_\d{8}_\d{6}_(whatsapp|whatsapp-business|telegram|telegram-x|signal|viber|meet|wechat)\.(?:wav|ogg|oga|opus|m4a|mp4|mp3|aac|flac|webm|amr|3gp)$/i;
 
 export function isVoipRecording(recording: Recording): boolean {
-  return VOIP_FILE.test(recording.audioDisplayName || '');
+  // Indexer preserves the source directory for new and cached recordings.
+  return VOIP_FILE.test(recording.audioDisplayName || '') ||
+    /(?:^|\/)VoIP(?:\/|$)/i.test(recording.sourceFolder || '');
 }
 
 export function filterCallRecordings(recordings: Recording[], filter: CallFilter): Recording[] {
@@ -20,13 +22,18 @@ export function filterCallRecordings(recordings: Recording[], filter: CallFilter
 
 export function callSourceLabel(recording: Recording): string {
   const match = VOIP_FILE.exec(recording.audioDisplayName || '');
-  if (!match) return '';
   const names: Record<string, string> = {
     whatsapp: 'WhatsApp', 'whatsapp-business': 'WhatsApp Business',
     telegram: 'Telegram', 'telegram-x': 'Telegram X',
     signal: 'Signal', viber: 'Viber', meet: 'Meet', wechat: 'WeChat',
   };
-  return names[match[1].toLowerCase()] ?? 'VoIP';
+  if (match) return names[match[1].toLowerCase()] ?? 'VoIP';
+  if (/(?:^|\/)VoIP(?:\/|$)/i.test(recording.sourceFolder || '')) {
+    const lastSegment = (recording.sourceFolder || '').split('/').filter(Boolean).pop()?.toLowerCase();
+    return lastSegment && lastSegment !== 'voip'
+      ? (names[lastSegment] ?? 'VoIP') : 'VoIP';
+  }
+  return '';
 }
 
 /** Local calendar date, not a UTC date; safe across timezone boundaries. */

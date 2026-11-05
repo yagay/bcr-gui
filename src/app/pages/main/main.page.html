@@ -40,6 +40,21 @@
     </button>
   }
 </div>
+<div class="history-counts" role="status" aria-live="polite">
+  <span>{{ isZh ? '索引' : 'Indexed' }}: {{ indexedCount() }}</span>
+  <span>{{ isZh ? '匹配' : 'Filtered' }}: {{ filteredCount() }}</span>
+  <span>{{ isZh ? '显示' : 'Shown' }}: {{ items().length }}</span>
+  <button type="button" class="history-view-button" (click)="toggleRecordView()"
+    [attr.aria-pressed]="showEachRecording()">
+    {{ showEachRecording() ? (isZh ? '按联系人分组' : 'Group by contact')
+      : (isZh ? '显示全部录音' : 'Show every recording') }}
+  </button>
+  @if (recordingsService.lastScanIncomplete()) {
+    <span class="scan-warning">{{ isZh
+      ? '部分目录扫描失败：已保留历史，请刷新重试'
+      : 'Some folders could not be scanned; saved history was preserved. Refresh to retry.' }}</span>
+  }
+</div>
 
 <ion-content id="main-content" class="main-content" [scrollY]="false"
   [class.disabled]="recordingsService.refreshProgress() !== undefined">
@@ -66,7 +81,7 @@
           <div class="call-summary">
             <div class="row-top">
               <span class="caller-name">{{ callerLabel(item) }}</span>
-              @if (getGroupCount(item) > 1) {
+              @if (!showEachRecording() && getGroupCount(item) > 1) {
                 <span class="group-count">{{ getGroupCount(item) }}</span>
               }
             </div>
