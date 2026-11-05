@@ -1,188 +1,88 @@
-.virtual-scroll-viewport {
-  height: 100%;
-
-  ::ng-deep .cdk-virtual-scroll-content-wrapper {
-    display: flex;
-    flex-direction: column;
-    gap: var(--item-gap);
-    padding: 12px 2px;
-  }
-
-}
-
-.toolbar-menu-items {
-  ion-icon {
-    margin-right: .5em;
-    color: unset;
-  }
-}
+/* Call-history view: fixed-height virtual rows and a single independent player. */
+:host { display: contents; }
 
 .main-content {
-  position: relative;
   --padding-start: 0;
   --padding-end: 0;
-  --padding-bottom: 0;
   --padding-top: 0;
+  --padding-bottom: 0;
 }
 
-.content-wrapper {
-  position: relative;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) min-content;
-  gap: 0;
-  height: 100%;
-}
-
-.virtual-scrollbar {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-}
-
-.player {
-  padding: 1em 1em calc(.5em + env(safe-area-inset-bottom, 0px)) 1em;
-  background-color: var(--player-background-color);
-  z-index: 1; // needed for the box-shadow to go over last recording
-}
-
-.details-actions {
+.content-wrapper { height: 100%; min-height: 0; position: relative; }
+.items { display: block; height: 100%; padding: 0 8px; margin: 0; background: var(--ion-background-color); }
+.virtual-scroll-viewport { height: 100%; width: 100%; }
+.virtual-scroll-viewport ::ng-deep .cdk-virtual-scroll-content-wrapper {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: var(--item-gap);
+  padding: 8px 0;
 }
+.virtual-scrollbar { position: absolute; top: 0; bottom: 0; right: 0; pointer-events: none; }
 
-.actions {
-  align-self: end;
-}
-
-.title {
-  font-size: 14pt;
-  line-height: 16pt;
-}
-
-.title,
-.subtitle {
-  color: RGB(var(--ion-text-color-rgb));
-}
-
-.subtitle {
+.direction-filters {
   display: flex;
-  flex-wrap: wrap;
-  gap: .5em;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 5px 10px;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--ion-color-step-150);
 }
+.direction-filters::-webkit-scrollbar { display: none; }
+.direction-filters ion-button { flex-shrink: 0; text-transform: none; --border-radius: 999px; }
 
-.call-direction-icon {
-  height: 0.7rem;
-  width: 0.7rem;
-}
-
-.items {
-  padding: 0 1em;
-  margin: 0;
-  background: var(--ion-background-color);
-  height: 100%;
-  min-height: 100%;
-
-  .item {
-    margin: 0;
-    min-height: var(--item-height);
-    border-radius: 10px;
-    box-shadow: 0 5px 7px -1px rgba(51, 51, 51, 0.23);
-
-    .op-name {
-      display: -webkit-box;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 1;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    &.selected {
-      border: 2px solid var(--item-border-color-selected);
-      background-color: var(--ion-item-background-selected);
-      box-shadow: none;
-    }
-
-    .checkbox {
-      margin-left: 1em;
-    }
-
-    .content {
-      display: flex;
-      flex-direction: column;
-      gap: 1em;
-    }
-
-    .actions {
-      display: flex;
-      gap: 1.25em;
-      justify-content: flex-end;
-      color: var(--ion-color-step-600);
-    }
-
-    .action {
-      font-size: 2em;
-      line-height: 2em;
-    }
-  }
-}
-
-// revert some customizations in multiline mode
-.multiselect .item.selected { min-height: var(--item-height); }
-
-.progress-overlay {
-  --background: var(--ion-color-step-100, #ffffff);
-  --color: var(--ion-color-primary, #3880ff);
-  --min-width: 60%;
-  ::ng-deep .loading-wrapper {
-    border: 2px solid var(--ion-color-step-200, #ffffff);
-    border-radius: 12px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-  }
-}
-
-/* Recording rows stay at the virtual viewport's fixed item size. The player
-   lives outside the viewport so expanding it cannot corrupt scroll offsets. */
-.virtual-scroll-viewport .item {
+.recording-row {
   height: var(--item-height);
   min-height: var(--item-height);
   max-height: var(--item-height);
   box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: var(--ion-item-background, var(--ion-background-color));
   overflow: hidden;
-  box-shadow: none;
-  border: 1px solid var(--ion-color-step-150);
-  border-radius: 8px;
 }
-.virtual-scroll-viewport .item ion-card-header { padding: 12px 14px; }
+.recording-row.selected, .recording-row.batch-selected {
+  border-color: var(--ion-color-primary);
+  background: var(--ion-item-background-selected, var(--ion-color-step-100));
+}
+.recording-row-main {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0 8px 10px;
+  cursor: pointer;
+}
+.recording-avatar { font-size: 32px; flex-shrink: 0; color: var(--ion-color-medium); }
+.recording-selection { font-size: 26px; flex-shrink: 0; color: var(--ion-color-primary); }
+.recording-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.recording-name { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recording-secondary { display: flex; align-items: center; color: var(--ion-color-medium); font-size: 12px; white-space: nowrap; overflow: hidden; }
+.recording-secondary app-call-icon { width: 13px; height: 13px; flex: 0 0 auto; margin-right: 5px; }
+.row-play, .row-more { --padding-start: 6px; --padding-end: 6px; margin: 0; flex: 0 0 auto; }
+.row-play { color: var(--ion-color-primary); }
+.row-more { color: var(--ion-color-medium); }
+
 .recording-player-footer {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
   background: var(--player-background-color);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, .08);
 }
+.recording-player-footer.player-hidden { display: none; }
 .selected-recording-details {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  padding: 8px 12px 0;
+  padding: 6px 12px 0;
   border-top: 1px solid var(--ion-color-step-150);
 }
-.selected-recording-name {
-  font-weight: 600;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.selected-recording-meta {
-  grid-column: 1;
-  font-size: 0.78rem;
-  color: var(--ion-color-medium);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.selected-recording-actions {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  display: flex;
-  align-items: center;
-}
-.selected-recording-actions ion-button { margin: 0; --padding-start: 7px; --padding-end: 7px; }
+.selected-recording-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.selected-recording-meta { grid-column: 1; color: var(--ion-color-medium); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.selected-recording-actions { grid-column: 2; grid-row: 1 / span 2; display: flex; }
+.selected-recording-actions ion-button { margin: 0; --padding-start: 6px; --padding-end: 6px; }
+.player { padding: 4px 12px 8px; background: var(--player-background-color); }
+
+.progress-overlay { --background: var(--ion-color-step-100); --color: var(--ion-color-primary); }
