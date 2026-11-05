@@ -12,29 +12,39 @@ import { I18nService } from 'src/app/services/i18n.service';
   imports: [CallIconComponent, ToHmsPipe, LongPressDirective, DatetimePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="history-entry" [class.is-child]="!isHeader()" [class.is-selected]="selected()"
-      [class.is-multiselect]="multiselect()" longPress (longPress)="onLongPress()"
-      (click)="onOpen()" role="button" tabindex="0"
+    <div class="history-entry" [class.is-child]="!isHeader()"
+      [class.is-selected]="selected()" [class.is-multiselect]="multiselect()"
+      longPress (longPress)="onLongPress()" (click)="onOpen()"
+      role="button" tabindex="0"
       (keydown.enter)="onOpen()" (keydown.space)="onOpen(); $event.preventDefault()">
-      <div class="avatar"><span>{{ avatarLetter() }}</span></div>
-      <div class="entry-body">
-        <div class="entry-heading">
-          <span class="caller">{{ recording().opName || recording().opNumber || i18n.get('HISTORY_UNKNOWN') }}</span>
-          @if (isHeader() && groupCount() > 1) {
-            <span class="count">{{ groupCount() }}</span>
-          }
+      @if (isHeader()) {
+        <div class="entry-body">
+          <div class="entry-heading">
+            <span class="caller">{{ recording().opName || recording().opNumber || i18n.get('HISTORY_UNKNOWN') }}</span>
+            @if (groupCount() > 1) { <span class="count">{{ groupCount() }}</span> }
+          </div>
+          <div class="entry-subtitle">
+            <app-call-icon [direction]="recording().direction ?? ''" />
+            <span>{{ recording().date | datetime }}</span>
+            @if (recording().duration > 0) {
+              <span class="duration">· {{ recording().duration | toHms }}</span>
+            }
+          </div>
         </div>
-        <div class="entry-subtitle">
-          <app-call-icon [direction]="recording().direction ?? ''" />
-          <span>{{ recording().date | datetime }}</span>
+      } @else {
+        <div class="child-branch" aria-hidden="true"></div>
+        <app-call-icon class="child-direction" [direction]="recording().direction ?? ''" />
+        <div class="child-info">
+          <span class="child-date">{{ recording().date | datetime }}</span>
           @if (recording().duration > 0) {
-            <span class="duration">· {{ recording().duration | toHms }}</span>
+            <span class="child-duration">{{ recording().duration | toHms }}</span>
           }
         </div>
-      </div>
+      }
       @if (multiselect()) {
         @if (isHeader() && groupCount() > 1) {
-          <button type="button" class="group-select" (click)="groupSelectClicked.emit(); $event.stopPropagation()"
+          <button type="button" class="group-select"
+            (click)="groupSelectClicked.emit(); $event.stopPropagation()"
             [attr.aria-label]="groupSelected()
               ? i18n.get('HISTORY_DESELECT_GROUP') : i18n.get('HISTORY_SELECT_GROUP')"
             [attr.aria-pressed]="groupSelected()">
@@ -60,32 +70,46 @@ import { I18nService } from 'src/app/services/i18n.service';
     </div>
   `,
   styles: [`
-    :host { display:block; box-sizing:border-box; height:78px; contain:layout paint size; }
-    .history-entry { height:100%; box-sizing:border-box; display:flex; align-items:center; padding:0 12px;
-      gap:12px; border-bottom:1px solid var(--ion-color-step-150);
-      background:var(--ion-background-color); cursor:pointer; min-width:0; }
-    .history-entry.is-child { padding-left:30px; background:var(--ion-color-step-50); }
-    .history-entry.is-selected { background:var(--ion-color-step-100); border-left:3px solid var(--ion-color-primary); }
-    .avatar { flex:0 0 42px; width:42px; height:42px; display:grid;place-items:center;
-      border-radius:50%; background:var(--ion-color-step-150); color:var(--ion-color-step-700); font-weight:600; }
-    .is-child .avatar { width:32px;height:32px;flex-basis:32px;font-size:13px; }
-    .entry-body { min-width:0;flex:1;display:flex;flex-direction:column;gap:7px; }
-    .entry-heading,.entry-subtitle { display:flex;align-items:center;gap:7px;min-width:0; }
-    .caller { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;font-weight:600; }
-    .is-child .caller { font-weight:400; }
-    .count {font-size:11px;border-radius:9px;padding:2px 6px;background:var(--ion-color-step-150); }
-    .entry-subtitle {color:var(--ion-color-step-600);font-size:12px;white-space:nowrap;overflow:hidden;}
+    :host {display:block;box-sizing:border-box;min-width:0;contain:layout paint;}
+    .history-entry {height:calc(100% - 6px);box-sizing:border-box;display:flex;align-items:center;gap:8px;
+      margin:3px 12px;padding:0 12px;border-radius:10px;
+      background:var(--ion-background-color);border:1px solid var(--ion-color-step-150);
+      box-shadow:0 2px 5px -3px rgba(40,40,40,.25);cursor:pointer;min-width:0;}
+    .history-entry.is-child {margin-left:34px;padding-left:8px;gap:7px;
+      border-left:3px solid var(--ion-color-step-350);
+      background:var(--ion-color-step-50);box-shadow:none;}
+    .history-entry.is-selected {background:var(--ion-item-background-selected,var(--ion-color-step-100));
+      border:2px solid var(--ion-color-primary);
+      box-shadow:0 0 0 1px var(--ion-color-primary);}
+    .entry-body {min-width:0;flex:1;display:flex;flex-direction:column;gap:7px;}
+    .entry-heading,.entry-subtitle {display:flex;align-items:center;gap:7px;min-width:0;}
+    .caller {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px;font-weight:600;}
+    .count {font-size:11px;border-radius:9px;padding:2px 7px;background:var(--ion-color-step-150);}
+    .entry-subtitle,.child-info {color:var(--ion-color-step-600);font-size:12px;white-space:nowrap;min-width:0;}
+    .entry-subtitle {overflow:hidden;}
     .entry-subtitle app-call-icon {width:14px;height:14px;flex:0 0 14px;}
     .entry-subtitle span {overflow:hidden;text-overflow:ellipsis;}
+    .child-branch {width:7px;height:16px;flex:0 0 7px;border-left:1px solid var(--ion-color-step-400);
+      border-bottom:1px solid var(--ion-color-step-400);margin-bottom:7px;}
+    .child-direction {width:14px;height:14px;flex:0 0 14px;}
+    .child-info {min-width:0;flex:1;display:flex;align-items:center;gap:8px;overflow:hidden;}
+    .child-date {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
+    .child-duration {font-size:11px;flex:0 0 auto;color:var(--ion-color-step-600);}
     button {border:0;background:transparent;color:var(--ion-color-primary);cursor:pointer;
-      flex:0 0 32px;display:grid;place-items:center;height:42px;padding:0;font-size:22px;}
-    .expand {color:var(--ion-color-step-550);}
-    .play {font-size:21px;}
+      flex:0 0 38px;display:grid;place-items:center;height:44px;padding:0;font-size:20px;}
+    .expand {color:var(--ion-color-step-600);}
+    .play {font-size:20px;}
     .selection-indicator {height:22px;width:22px;flex:0 0 22px;border:2px solid var(--ion-color-step-500);
       border-radius:6px;display:grid;place-items:center;font-size:14px;}
     .selection-indicator.partial {border-color:var(--ion-color-primary);color:var(--ion-color-primary);}
-    .group-select {flex:0 0 38px;min-width:38px;height:44px;display:grid;place-items:center;}
-    .selection-indicator.checked {background:var(--ion-color-primary);color:var(--ion-color-primary-contrast);border-color:var(--ion-color-primary);}
+    .group-select {flex:0 0 38px;min-width:38px;height:44px;}
+    .selection-indicator.checked {background:var(--ion-color-primary);color:var(--ion-color-primary-contrast);
+      border-color:var(--ion-color-primary);}
+    @media(max-width:355px) {
+      .history-entry {margin-inline:7px;padding-inline:8px;gap:5px;}
+      .history-entry.is-child {margin-left:24px;}
+      .child-duration {display:none;}
+    }
   `]
 })
 export class HistoryRecordingRowComponent {

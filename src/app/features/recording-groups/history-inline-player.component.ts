@@ -7,7 +7,7 @@ import { ToHmsPipe } from 'src/app/pipes/to-hms.pipe';
 
 /**
  * A single view of the shared native audio engine. It can render either as
- * one 78px virtual-scroll row or as a small dock when the contact is folded.
+ * one measured virtual-scroll row or as a compact dock when the call scrolls away.
  */
 @Component({
   selector: 'app-history-inline-player',
@@ -50,14 +50,14 @@ import { ToHmsPipe } from 'src/app/pipes/to-hms.pipe';
     </div>
   `,
   styles: [`
-    :host {display:block;height:78px;box-sizing:border-box;min-width:0;}
-    .inline-player {height:78px;box-sizing:border-box;background:var(--ion-color-step-50);
-      border-bottom:1px solid var(--ion-color-step-200);padding:5px 8px 6px;
+    :host {display:block;height:90px;box-sizing:border-box;min-width:0;}
+    .inline-player {height:100%;box-sizing:border-box;background:var(--ion-color-step-50);
+      border-bottom:1px solid var(--ion-color-step-200);padding:8px 8px 6px;
       display:flex;flex-direction:column;gap:3px;}
-    .timeline {display:flex;gap:8px;align-items:center;height:24px;font-size:11px;color:var(--ion-color-step-700);}
+    .timeline {display:flex;gap:8px;align-items:center;height:32px;font-size:11px;color:var(--ion-color-step-700);}
     .timeline ion-range {min-width:0;flex:1;height:28px;padding:0;--bar-height:4px;--knob-size:16px;--pin-background:var(--ion-color-primary);}
-    .buttons {height:40px;display:flex;justify-content:space-between;align-items:center;gap:2px;}
-    .buttons button {min-width:36px;flex:1 1 0;height:40px;padding:0 2px;border:0;border-radius:6px;
+    .buttons {height:42px;display:flex;justify-content:space-between;align-items:center;gap:2px;}
+    .buttons button {min-width:36px;flex:1 1 0;height:42px;padding:0 2px;border:0;border-radius:6px;
       background:transparent;color:var(--ion-color-primary);font-size:13px;white-space:nowrap;}
     .buttons .toggle {font-size:20px;flex:1.2 1 0;}
     .buttons .speed {font-size:12px;}
