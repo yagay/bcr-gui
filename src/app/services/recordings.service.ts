@@ -13,6 +13,7 @@ import { ContactsService } from './contacts.service';
 import { I18nService } from './i18n.service';
 import { MessageBoxService } from './message-box.service';
 import { SettingsService } from './settings.service';
+import { isRecordingAudioFile, shouldPruneCachedAudio } from './recording-scan-policy';
 
 @Injectable({
   providedIn: 'root'
@@ -29,6 +30,9 @@ export class RecordingsService {
   /** null = no VoIP folder; undefined = subfolder not resolved this session. */
   private voipDirectoryUri: string | null | undefined = undefined;
   private lastFullScan = 0;
+  /** An incomplete scan keeps cached recordings and will retry on resume. */
+  public readonly lastScanIncomplete = signal(false);
+  public readonly lastScanStats = signal<{ files: number; indexed: number; folders: number } | undefined>(undefined);
 
   // reference to main page (if active)
   public mainPageRef?: MainPage = undefined;
@@ -152,11 +156,7 @@ export class RecordingsService {
       const fileKey = (name: string, folder: string) =>
         folder ? `${folder}/${name}` : name;
       const audioFilesObj = Object.fromEntries(indexedFiles
-        .filter(({file}) => {
-          const extension = /\.(flac|m4a|mp4|mp3|ogg|oga|opus|wav|wave|amr|awb|3gp|3gpp|3ga|aac|webm)$/i.test(file.displayName);
-          const mime = (file.type || '').toLowerCase();
-          return extension || this.settings.supportedTypes.includes(mime) || mime.startsWith('audio/');
-        })
+        .filter(({file}) => isRecordingAudioFile(file.displayName, file.type || '', this.settings.supportedTypes))
         .map(({file, folder}) => [fileKey(file.displayName, folder), file]));
       const metadataFilesObj = Object.fromEntries(indexedFiles
         .filter(({file}) => /\.json$/i.test(file.displayName))
@@ -165,7 +165,7 @@ export class RecordingsService {
       // STEP 1: remove deleted files from DB
       // ------------------------------------
       Object.keys(currentDbObj)
-        .filter(fn => !scanIncomplete && !(fn in audioFilesObj))
+        .filter(fn => shouldPruneCachedAudio(fn, audioFilesObj, scanIncomplete))
         .forEach(fn => {
           delete currentDbObj[fn];
         }
@@ -209,7 +209,14 @@ export class RecordingsService {
             } catch (error) {
               // One bad metadata/audio entry must not abort the entire history scan.
               console.warn('Cannot read recording metadata; using filename:', file.displayName, error);
-              dbRecord = await Recording.createInstance(file, undefined, filenameRegExp);
+              try {
+                dbRecord = await Recording.createInstance(file, undefined, filenameRegExp);
+              } catch (fallbackError) {
+                // A single broken file must not hide all subsequent recordings.
+                scanIncomplete = true;
+                console.warn('Cannot index audio; preserving the rest of history:', key, fallbackError);
+                continue;
+              }
             }
             dbRecord.sourceFolder = sourceFolder;
             currentDbObj[key] = dbRecord;
@@ -233,6 +240,12 @@ export class RecordingsService {
       this.lastUpdate = new Date().getTime();
       // A partial SAF scan must be retried rather than treated as complete.
       this.lastFullScan = scanIncomplete ? 0 : this.lastUpdate;
+      this.lastScanIncomplete.set(scanIncomplete);
+      this.lastScanStats.set({
+        files: count,
+        indexed: Object.keys(currentDbObj).length,
+        folders: visited.size,
+      });
       this.recordings.set(Object.values(currentDbObj));
       await this.save(false);
 
@@ -241,6 +254,8 @@ export class RecordingsService {
 
     }
     catch(error: any) {
+      this.lastScanIncomplete.set(true);
+      this.lastFullScan = 0;
       if (error.code === ErrorCode.ERR_INVALID_URI) {
         this.selectRecordingsDirectory(() => this.refreshContent());
       }
