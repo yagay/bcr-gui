@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
+import { I18nService } from 'src/app/services/i18n.service';
 import { Recording } from 'src/app/models/recording';
 import { IonicBundleModule } from 'src/app/IonicBundle.module';
 import { DatetimePipe } from 'src/app/pipes/datetime.pipe';
@@ -11,31 +12,41 @@ import { FilesizePipe } from 'src/app/pipes/filesize.pipe';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [IonicBundleModule, DatetimePipe, FilesizePipe],
   template: `
-    <section class="details" [attr.aria-label]="zh() ? '录音详情' : 'Recording details'">
+    <section class="details" [attr.aria-label]="i18n.get('HOME_EDIT_TITLE')">
       <div class="title-row">
-        <strong>{{ recording().opName || recording().opNumber || (zh() ? '未知号码' : 'Unknown') }}</strong>
+        <strong>{{ recording().opName || recording().opNumber || i18n.get('HISTORY_UNKNOWN') }}</strong>
         <button class="close-button" type="button" (click)="close.emit()"
-          [attr.aria-label]="zh() ? '关闭详情' : 'Close details'">×</button>
+          [attr.aria-label]="i18n.get('HISTORY_CLOSE_DETAILS')">×</button>
       </div>
       <div class="metadata">
+        @if (recording().opNumber) {
+          <span class="phone-line">
+            <strong>{{ i18n.get('HOME_REC_PHONE_NUMBER') }}:</strong>
+            @if (dialUri()) {
+              <a [href]="dialUri()">{{ recording().opNumber }}</a>
+            } @else {
+              <span>{{ recording().opNumber }}</span>
+            }
+          </span>
+        }
         <span>{{ recording().date | datetime }}</span>
-        <span>{{ recording().mimeType }}</span>
-        <span>{{ recording().filesize | filesize }}</span>
+        <span><strong>{{ i18n.get('HOME_REC_TYPE') }}:</strong> {{ recording().mimeType }}</span>
+        <span><strong>{{ i18n.get('HOME_REC_SIZE') }}:</strong> {{ recording().filesize | filesize }}</span>
       </div>
       <div class="actions">
         @if (dialUri()) {
-          <a [href]="dialUri()" class="action" [attr.aria-label]="zh() ? '拨号' : 'Call'">
+          <a [href]="dialUri()" class="action" [attr.aria-label]="i18n.get('HISTORY_CALL')">
             <ion-icon name="call-outline" />{{ zh() ? '拨号' : 'Call' }}
           </a>
         }
         <button type="button" class="action" (click)="edit.emit()">
-          <ion-icon name="pencil-outline" />{{ zh() ? '编辑' : 'Edit' }}
+          <ion-icon name="pencil-outline" />{{ i18n.get('LBL_EDIT') }}
         </button>
         <button type="button" class="action" (click)="share.emit()">
-          <ion-icon name="share-outline" />{{ zh() ? '分享' : 'Share' }}
+          <ion-icon name="share-outline" />{{ i18n.get('HISTORY_SHARE') }}
         </button>
         <button type="button" class="action" (click)="delete.emit()">
-          <ion-icon name="trash-outline" />{{ zh() ? '删除' : 'Delete' }}
+          <ion-icon name="trash-outline" />{{ i18n.get('LBL_DELETE') }}
         </button>
       </div>
     </section>
@@ -49,6 +60,8 @@ import { FilesizePipe } from 'src/app/pipes/filesize.pipe';
     .close-button {border:0;background:transparent;color:var(--ion-color-step-650);font-size:23px;padding:0 5px;}
     .metadata {display:flex;gap:6px 12px;flex-wrap:wrap;color:var(--ion-color-step-650);
       margin-top:4px;font-size:11px;}
+    .phone-line {display:flex;gap:5px;flex:1 0 100%;align-items:center;min-width:0;flex-wrap:wrap;}
+    .phone-line a {color:var(--ion-color-primary);text-decoration:none;overflow-wrap:anywhere;}
     .actions {display:flex;align-items:center;gap:6px;overflow-x:auto;margin-top:8px;}
     .action {display:inline-flex;align-items:center;justify-content:center;gap:5px;
       flex:1 0 auto;padding:7px 10px;border:1px solid var(--ion-color-step-200);
@@ -59,7 +72,7 @@ import { FilesizePipe } from 'src/app/pipes/filesize.pipe';
 })
 export class HistoryDetailsComponent {
   readonly recording = input.required<Recording>();
-  readonly zh = input(false);
+  protected readonly i18n = inject(I18nService);
   readonly dialUri = input<string | null>(null);
   readonly close = output<void>();
   readonly edit = output<void>();

@@ -17,8 +17,7 @@ export class DatetimePipe implements PipeTransform {
     if (timestamp === null || timestamp === undefined) return '';
 
     // merge 12/24 time setting (could be forced in Android settings...)
-    options = options ?? this.settings.dateTimeFormat;
-    Object.assign(options, { hour12: this.settings.is12Hours });
+    options = { ...(options ?? this.settings.dateTimeFormat), hour12: this.settings.is12Hours };
 
     // manage 'custom' format
     if (options.customFormat) {
@@ -27,7 +26,7 @@ export class DatetimePipe implements PipeTransform {
     else {
       // format date
       const dtf = Intl.DateTimeFormat(
-        [], // current culture
+        options.culture || this.settings.culture || undefined, // configured language, otherwise system
         options as Intl.DateTimeFormatOptions
       );
       return dtf.format(timestamp);

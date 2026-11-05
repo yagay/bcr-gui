@@ -1,4 +1,8 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output, signal } from '@angular/core';
+import { IonicBundleModule } from 'src/app/IonicBundle.module';
+import { I18nService } from 'src/app/services/i18n.service';
+import { toHms } from 'src/app/pipes/to-hms.pipe';
+import { RangeCustomEvent } from '@ionic/angular';
 import { ToHmsPipe } from 'src/app/pipes/to-hms.pipe';
 
 /**
@@ -8,34 +12,40 @@ import { ToHmsPipe } from 'src/app/pipes/to-hms.pipe';
 @Component({
   selector: 'app-history-inline-player',
   standalone: true,
-  imports: [ToHmsPipe],
+  imports: [IonicBundleModule, ToHmsPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="inline-player" role="group" [attr.aria-label]="zh() ? '录音播放控制' : 'Recording playback controls'">
+    <div class="inline-player" role="group" [attr.aria-label]="i18n.get('HISTORY_PLAYER')">
       <div class="timeline">
         <span>{{ position() | toHms }}</span>
-        <input type="range" min="0" [max]="duration() || 1" [value]="position()"
-          [disabled]="!ready()" (input)="preview.emit(+$any($event.target).value)"
-          (change)="seek.emit(+$any($event.target).value)"
-          [attr.aria-label]="zh() ? '播放进度' : 'Playback position'" />
+        <ion-range class="range-bar" [min]="0" [max]="duration() || 1"
+          [value]="dragging() ? dragValue() : position()" [disabled]="!ready()"
+          [pin]="true" [pinFormatter]="formatPin"
+          [step]="duration() > 600 ? 10 : duration() > 180 ? 5 : 1"
+          [snaps]="true" [ticks]="false"
+          (ionKnobMoveStart)="onDragStart()"
+          (ionInput)="onRangePreview($event)"
+          (ionKnobMoveEnd)="onDragEnd()"
+          (ionChange)="onRangeCommit($event)"
+          [attr.aria-label]="i18n.get('HISTORY_POSITION')" />
         <span>{{ duration() | toHms }}</span>
       </div>
       <div class="buttons">
         <button type="button" (click)="previous.emit()" [disabled]="!ready() || !canPrevious()"
-          [attr.aria-label]="zh() ? '上一条录音' : 'Previous recording'">⏮</button>
+          [attr.aria-label]="i18n.get('HISTORY_PREVIOUS')">⏮</button>
         <button type="button" (click)="rewind.emit()" [disabled]="!ready()"
-          [attr.aria-label]="zh() ? '快退' : 'Rewind'">{{ '−' + seekSeconds() }}</button>
+          [attr.aria-label]="i18n.get('HISTORY_REWIND')">{{ '−' + seekSeconds() }}</button>
         <button type="button" class="toggle" (click)="toggle.emit()" [disabled]="!ready() && !failed()"
-          [attr.aria-label]="failed() ? 'Retry' : playing() ? 'Pause' : 'Play'">
+          [attr.aria-label]="failed() ? i18n.get('HISTORY_RETRY') : playing() ? i18n.get('HISTORY_PAUSE') : i18n.get('HISTORY_PLAY')">
           {{ failed() ? '↻' : playing() ? 'Ⅱ' : ready() ? '▶' : '…' }}
         </button>
         <button type="button" (click)="forward.emit()" [disabled]="!ready()"
-          [attr.aria-label]="zh() ? '快进' : 'Forward'">{{ '+' + seekSeconds() }}</button>
+          [attr.aria-label]="i18n.get('HISTORY_FORWARD')">{{ '+' + seekSeconds() }}</button>
         <button type="button" (click)="next.emit()" [disabled]="!ready() || !canNext()"
-          [attr.aria-label]="zh() ? '下一条录音' : 'Next recording'">⏭</button>
+          [attr.aria-label]="i18n.get('HISTORY_NEXT')">⏭</button>
         <button type="button" class="speed" (click)="speedChange.emit()" [disabled]="!ready()"
-          [attr.aria-label]="zh() ? '播放倍速' : 'Playback speed'">{{ speed() }}×</button>
-        <button type="button" (click)="dismiss.emit()" [attr.aria-label]="zh() ? '关闭播放器' : 'Close player'">×</button>
+          [attr.aria-label]="i18n.get('HISTORY_SPEED')">{{ speed() }}×</button>
+        <button type="button" (click)="dismiss.emit()" [attr.aria-label]="i18n.get('HISTORY_CLOSE')">×</button>
       </div>
     </div>
   `,
@@ -45,7 +55,7 @@ import { ToHmsPipe } from 'src/app/pipes/to-hms.pipe';
       border-bottom:1px solid var(--ion-color-step-200);padding:5px 8px 6px;
       display:flex;flex-direction:column;gap:3px;}
     .timeline {display:flex;gap:8px;align-items:center;height:24px;font-size:11px;color:var(--ion-color-step-700);}
-    .timeline input {min-width:0;flex:1;accent-color:var(--ion-color-primary);height:25px;}
+    .timeline ion-range {min-width:0;flex:1;height:28px;padding:0;--bar-height:4px;--knob-size:16px;--pin-background:var(--ion-color-primary);}
     .buttons {height:40px;display:flex;justify-content:space-between;align-items:center;gap:2px;}
     .buttons button {min-width:36px;flex:1 1 0;height:40px;padding:0 2px;border:0;border-radius:6px;
       background:transparent;color:var(--ion-color-primary);font-size:13px;white-space:nowrap;}
@@ -56,7 +66,10 @@ import { ToHmsPipe } from 'src/app/pipes/to-hms.pipe';
   `]
 })
 export class HistoryInlinePlayerComponent {
-  readonly zh = input(false);
+  protected readonly i18n = inject(I18nService);
+  protected readonly dragging = signal(false);
+  protected readonly dragValue = signal(0);
+  protected formatPin = (value: number) => toHms(value);
   readonly position = input(0);
   readonly duration = input(0);
   readonly playing = input(false);
@@ -75,4 +88,24 @@ export class HistoryInlinePlayerComponent {
   readonly toggle = output<void>();
   readonly speedChange = output<void>();
   readonly dismiss = output<void>();
+  protected onDragStart(): void {
+    this.dragging.set(true);
+    this.dragValue.set(this.position());
+  }
+  protected onRangePreview(event: RangeCustomEvent): void {
+    const value = Number(event.detail.value);
+    if (!Number.isFinite(value)) return;
+    if (this.dragging()) this.dragValue.set(value);
+    this.preview.emit(value);
+  }
+  protected onDragEnd(): void {
+    this.dragging.set(false);
+  }
+  protected onRangeCommit(event: RangeCustomEvent): void {
+    const value = Number(event.detail.value);
+    if (!Number.isFinite(value)) return;
+    this.dragging.set(false);
+    this.seek.emit(value);
+  }
+
 }

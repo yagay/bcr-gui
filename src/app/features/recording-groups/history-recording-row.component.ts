@@ -1,14 +1,15 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { Recording } from 'src/app/models/recording';
 import { CallIconComponent } from 'src/app/components/call-icon/call-icon.component';
 import { ToHmsPipe } from 'src/app/pipes/to-hms.pipe';
 import { LongPressDirective } from 'src/app/directives/long-press.directive';
-import { callHistoryDateLabel } from './history-display-rows';
+import { DatetimePipe } from 'src/app/pipes/datetime.pipe';
+import { I18nService } from 'src/app/services/i18n.service';
 
 @Component({
   selector: 'app-history-recording-row',
   standalone: true,
-  imports: [CallIconComponent, ToHmsPipe, LongPressDirective],
+  imports: [CallIconComponent, ToHmsPipe, LongPressDirective, DatetimePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="history-entry" [class.is-child]="!isHeader()" [class.is-selected]="selected()"
@@ -18,14 +19,14 @@ import { callHistoryDateLabel } from './history-display-rows';
       <div class="avatar"><span>{{ avatarLetter() }}</span></div>
       <div class="entry-body">
         <div class="entry-heading">
-          <span class="caller">{{ recording().opName || recording().opNumber || (zh() ? '未知号码' : 'Unknown') }}</span>
+          <span class="caller">{{ recording().opName || recording().opNumber || i18n.get('HISTORY_UNKNOWN') }}</span>
           @if (isHeader() && groupCount() > 1) {
             <span class="count">{{ groupCount() }}</span>
           }
         </div>
         <div class="entry-subtitle">
           <app-call-icon [direction]="recording().direction ?? ''" />
-          <span>{{ formattedDate() }}</span>
+          <span>{{ recording().date | datetime }}</span>
           @if (recording().duration > 0) {
             <span class="duration">· {{ recording().duration | toHms }}</span>
           }
@@ -36,13 +37,13 @@ import { callHistoryDateLabel } from './history-display-rows';
       } @else {
         @if (isHeader() && groupCount() > 1) {
           <button type="button" class="expand" (click)="expandedClicked.emit(); $event.stopPropagation()"
-            [attr.aria-label]="expanded() ? (zh() ? '收起' : 'Collapse') : (zh() ? '展开' : 'Expand')"
+            [attr.aria-label]="expanded() ? i18n.get('HISTORY_COLLAPSE') : i18n.get('HISTORY_EXPAND')"
             [attr.aria-expanded]="expanded()">
             <span>{{ expanded() ? '⌃' : '⌄' }}</span>
           </button>
         }
         <button class="play" type="button" (click)="playClicked.emit(); $event.stopPropagation()"
-          [attr.aria-label]="playing() ? (zh() ? '暂停' : 'Pause') : (zh() ? '播放' : 'Play')">
+          [attr.aria-label]="playing() ? i18n.get('HISTORY_PAUSE') : i18n.get('HISTORY_PLAY')">
           <span>{{ playing() ? 'Ⅱ' : '▶' }}</span>
         </button>
       }
@@ -85,8 +86,7 @@ export class HistoryRecordingRowComponent {
   readonly partial = input(false);
   readonly playing = input(false);
   readonly multiselect = input(false);
-  readonly zh = input(false);
-  readonly hour12 = input(false);
+  protected readonly i18n = inject(I18nService);
   readonly opened = output<void>();
   readonly playClicked = output<void>();
   readonly expandedClicked = output<void>();
@@ -112,10 +112,5 @@ export class HistoryRecordingRowComponent {
     const r = this.recording();
     const name = r.opName || r.opNumber || '?';
     return name.slice(0, 1).toUpperCase();
-  }
-  protected formattedDate(): string {
-    return callHistoryDateLabel(
-      this.recording().date, this.zh() ? 'zh-CN' : 'en-GB', this.hour12(),
-    );
   }
 }
