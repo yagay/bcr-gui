@@ -37,6 +37,18 @@
   </ion-toolbar>
 }
 
+<!-- Quick direction filter, separate from playback and batch selection. -->
+@if (!isMultiselect()) {
+  <div class="direction-filters" role="group" aria-label="Call direction">
+    @for (filter of directionFilters; track filter.value) {
+      <ion-button size="small" [fill]="directionFilter() === filter.value ? 'solid' : 'clear'"
+        (click)="setDirectionFilter(filter.value)">
+        {{ filter.label }}
+      </ion-button>
+    }
+  </div>
+}
+
 <!-- main content (list) -->
 <ion-content #content
   id="main-content"
@@ -77,35 +89,38 @@
         (scrolledIndexChange)="onScroll($event)"
       >
 
-        <!-- recording item -->
-        <ion-card *cdkVirtualFor="let item of items(); let index = index; trackBy: trackByUri"
-          class="item"
-          [class.selected]="item.selected"
-        >
-          <div>
-
-            <!-- card content -->
-            <ion-card-header
-              (click)="onItemClick(item);"
-              longPress
-              (longPress)="startMultiselection(item)"
-            >
-              <ion-card-title class="title">
-                <div class="op-name">{{ item.opName }}</div>
-              </ion-card-title>
-              <ion-card-subtitle class="left-container subtitle">
-                <app-call-icon class="call-direction-icon" [direction]="item?.direction || ''" />
-                <span>{{ item?.date | datetime }}</span>
-                @if (item.duration) {
-                  • <span>{{ item.duration | toHms }}</span>
-                }
-              </ion-card-subtitle>
-            </ion-card-header>
-
-
+        <!-- Fixed-height row: native player is deliberately outside virtual scroll. -->
+        <div *cdkVirtualFor="let item of items(); let index = index; trackBy: trackByUri"
+          class="recording-row" [class.selected]="!isMultiselect() && selectedItem()?.audioUri === item.audioUri"
+          [class.batch-selected]="isMultiselect() && isSelected(item)">
+          <div class="recording-row-main" (click)="onItemClick(item)"
+            longPress (longPress)="startMultiselection(item)">
+            @if (isMultiselect()) {
+              <ion-icon class="recording-selection"
+                [name]="isSelected(item) ? 'checkbox' : 'square-outline'" />
+            } @else {
+              <ion-icon class="recording-avatar" name="person-circle-outline" />
+            }
+            <div class="recording-info">
+              <div class="recording-name">{{ item.opName }}</div>
+              <div class="recording-secondary">
+                <app-call-icon [direction]="item.direction || ''" />
+                <span>{{ item.date | datetime }}</span>
+                @if (item.duration) { <span> · {{ item.duration | toHms }}</span> }
+              </div>
+            </div>
           </div>
-
-        </ion-card>
+          @if (!isMultiselect()) {
+            <ion-button class="row-play" fill="clear" aria-label="Play recording"
+              (click)="playRecording(item, $event)">
+              <ion-icon slot="icon-only" name="play-outline" />
+            </ion-button>
+            <ion-button class="row-more" fill="clear" aria-label="Recording actions"
+              (click)="showRecordingActions(item, $event)">
+              <ion-icon slot="icon-only" name="ellipsis-vertical" />
+            </ion-button>
+          }
+        </div>
 
       </cdk-virtual-scroll-viewport>
 
@@ -130,21 +145,23 @@
 
 </ion-content>
 
-<!-- audio player -->
-@if (selectedItem() && !isMultiselect()) {
-  <ion-footer class="recording-player-footer">
+<!-- One player instance for the active recording; never changes virtual row height. -->
+@if (selectedItem()) {
+  <ion-footer class="recording-player-footer" [class.player-hidden]="isMultiselect()">
     <div class="selected-recording-details">
       <div class="selected-recording-name">{{ selectedItem()!.opName }}</div>
       <div class="selected-recording-meta">{{ selectedItem()!.date | datetime }} · {{ selectedItem()!.opNumber }}</div>
       <div class="selected-recording-actions">
-        <ion-button fill="clear" (click)="editItem(selectedItem()!)" aria-label="Edit"><ion-icon slot="icon-only" name="pencil" /></ion-button>
-        <ion-button fill="clear" (click)="shareRecording(selectedItem()!, $any($event))" aria-label="Share"><ion-icon slot="icon-only" name="share-social" /></ion-button>
-        <ion-button fill="clear" (click)="deleteItems([selectedItem()!])" aria-label="Delete"><ion-icon slot="icon-only" name="trash" /></ion-button>
+        <ion-button fill="clear" (click)="showRecordingActions(selectedItem()!)" aria-label="Actions">
+          <ion-icon slot="icon-only" name="ellipsis-vertical" />
+        </ion-button>
+        <ion-button fill="clear" (click)="selectedItem.set(undefined)" aria-label="Close player">
+          <ion-icon slot="icon-only" name="close" />
+        </ion-button>
       </div>
     </div>
     <app-audio-player #audioPlayer class="player"
       [recording]="selectedItem()!"
-      (onSkip)="onSkip($event)"
-    />
+      (onSkip)="onSkip($event)" />
   </ion-footer>
 }
