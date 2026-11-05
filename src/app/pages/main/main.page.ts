@@ -226,14 +226,17 @@ export class MainPage implements AfterViewInit, OnDestroy {
       this.onRowClick(item);
       return;
     }
-    void this.selectAndPlay(item);
+    // Playing the group's representative recording must not silently
+    // expand its history. Only the chevron or main row tap controls expansion.
+    const header = !this.showAllRecordings() && this.isGroupHeader(item) && this.getGroupCount(item) > 1;
+    void this.selectAndPlay(item, !header);
   }
 
   /**
    * The latest requested recording wins. A native player is shared across
    * every row; never try to play while the previous file is still loaded.
    */
-  private async selectAndPlay(item: Recording): Promise<void> {
+  private async selectAndPlay(item: Recording, expandGroup = true): Promise<void> {
     if (this.selectedItem() === item && this.player()?.isReadyFor(item)) {
       ++this.playRequestId;
       await this.player()?.togglePlayPause();
@@ -242,7 +245,7 @@ export class MainPage implements AfterViewInit, OnDestroy {
     }
     const request = ++this.playRequestId;
     const retry = this.selectedItem() === item && this.player()?.failedState() === true;
-    this.selectRecording(item);
+    this.selectRecording(item, expandGroup);
     this.cdr.detectChanges();
     if (retry) this.player()?.retryFailed();
     this.focusRecording(item);
@@ -280,9 +283,9 @@ export class MainPage implements AfterViewInit, OnDestroy {
     });
   }
 
-  private selectRecording(item: Recording): void {
+  private selectRecording(item: Recording, expandGroup = true): void {
     this.selectedUris.set(new Set());
-    if (!this.showAllRecordings()) {
+    if (expandGroup && !this.showAllRecordings()) {
       this.recordingGroups.expand(item, this.settings.defaultCountryPrefix);
     }
     this.selectedItem.set(item);
