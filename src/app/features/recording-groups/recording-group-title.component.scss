@@ -1,0 +1,45 @@
+:host {
+  display: block;
+}
+
+.title {
+  color: RGB(var(--ion-text-color-rgb));
+  font-size: 14pt;
+  line-height: 16pt;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  ion-icon {
+    color: var(--ion-color-primary);
+    font-size: 1.5em;
+  }
+}
+
+.op-name {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  text-overflow: ellipsis;
+}
+
+.secondary-text {
+  color: var(--ion-color-step-600);
+  font-size: 0.9em;
+  font-style: italic;
+}
+
+:host-context(.item.selected) .op-name {
+  -webkit-line-clamp: 4;
+}

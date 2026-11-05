@@ -1,0 +1,30 @@
+@if (isHeader || selected) {
+  <ion-card-title class="title">
+    @if (isHeader) {
+      <div class="header-content">
+        <div class="op-name">{{ recording.opName }}</div>
+        <div class="header-actions">
+          @if (multiselect) {
+            @if (groupCount > 1) {
+              <ion-icon [name]="groupSelected ? 'checkbox' : groupPartial ? 'remove-circle-outline' : 'square-outline'"
+                (click)="selectGroup.emit(); $event.stopPropagation()"
+                [attr.aria-label]="groupSelected ? 'Deselect contact group' : 'Select contact group'" />
+            }
+          } @else {
+            <ion-icon
+              name="play-circle-outline"
+              (click)="playRecording.emit(recording); $event.stopPropagation()"
+            />
+            @if (groupCount > 1) {
+              <ion-badge color="medium" mode="ios">{{ groupCount }}</ion-badge>
+              <ion-icon [name]="expanded ? 'chevron-up' : 'chevron-down'"
+                (click)="expandRequested.emit(); $event.stopPropagation()" />
+            }
+          }
+        </div>
+      </div>
+    } @else {
+      <div class="op-name secondary-text">{{ recording.opName }}</div>
+    }
+  </ion-card-title>
+}
