@@ -13,7 +13,6 @@ import { ContactsService } from './contacts.service';
 import { I18nService } from './i18n.service';
 import { MessageBoxService } from './message-box.service';
 import { SettingsService } from './settings.service';
-import { isRecordingAudioFile, shouldPruneCachedAudio } from './recording-scan-policy';
 
 @Injectable({
   providedIn: 'root'
@@ -27,12 +26,6 @@ export class RecordingsService {
 
   // timestamp of last update, used to automatically refresh recording on app resume
   private lastUpdate: number = 0;
-  /** null = no VoIP folder; undefined = subfolder not resolved this session. */
-  private voipDirectoryUri: string | null | undefined = undefined;
-  private lastFullScan = 0;
-  /** An incomplete scan keeps cached recordings and will retry on resume. */
-  public readonly lastScanIncomplete = signal(false);
-  public readonly lastScanStats = signal<{ files: number; indexed: number; folders: number } | undefined>(undefined);
 
   // reference to main page (if active)
   public mainPageRef?: MainPage = undefined;
@@ -100,72 +93,29 @@ export class RecordingsService {
     this.refreshProgress.set(0.001);
     console.log("Reading files in folder:");
 
-    // Contact access is optional: a permission/provider failure must not hide audio.
-    let pnm: Awaited<ReturnType<ContactsService['getPhoneNumbersMap']>> | undefined;
-    try {
-      pnm = await this.contactsService.getPhoneNumbersMap();
-    } catch (error) {
-      console.warn('Contact lookup unavailable; indexing recordings without names:', error);
-    }
+    // get a phone numbers map
+    // find contact with that phone number
+    const pnm = await this.contactsService.getPhoneNumbersMap();
 
     // filename RegExp parser instance
     const filenameRegExp = Recording.getFilenameRegExp(this.settings.filenamePattern);
 
     // save current DB in an object structure keyed by filename/audioDisplayName (to speedup search)
-    // Names can repeat in the root and VoIP subfolder. Include the relative
-    // folder in the cache key while preserving legacy root-level DB entries.
-    let currentDbObj = Object.fromEntries(this.recordings().map(i =>
-      [i.sourceFolder ? `${i.sourceFolder}/${i.audioDisplayName}` : i.audioDisplayName, i]
-    ));
+    let currentDbObj = Object.fromEntries(this.recordings().map(i => [ i.audioDisplayName, i ]));
 
     try {
-      // SAF providers may return generic audio MIME types and nested folders.
-      // Scan subfolders, but avoid loops and keep cached results after partial failures.
-      const indexedFiles: Array<{ file: Awaited<ReturnType<typeof AndroidSAFUtils.listFiles>>[number]; folder: string }> = [];
-      const visited = new Set<string>();
-      let scanIncomplete = false;
-      const scan = async (directoryUri: string, folder: string, depth: number): Promise<void> => {
-        if (visited.has(directoryUri)) return;
-        visited.add(directoryUri);
-        let entries: Awaited<ReturnType<typeof AndroidSAFUtils.listFiles>>;
-        try {
-          entries = await AndroidSAFUtils.listFiles({ directoryUri });
-        } catch (error) {
-          if (!folder) throw error;
-          scanIncomplete = true;
-          console.warn('Cannot scan recording subfolder:', folder, error);
-          return;
-        }
-        if (!folder) {
-          this.voipDirectoryUri = entries.find(f => f.isDirectory && f.displayName === 'VoIP')?.uri ?? null;
-        }
-        for (const file of entries) {
-          if (file.isDirectory) {
-            if (depth < 8) {
-              await scan(file.uri, folder ? `${folder}/${file.displayName}` : file.displayName, depth + 1);
-            } else {
-              scanIncomplete = true;
-              console.warn('Recording folder nesting limit reached:', file.displayName);
-            }
-          } else {
-            indexedFiles.push({ file, folder });
-          }
-        }
-      };
-      await scan(this.settings.recordingsDirectoryUri, '', 0);
-      const fileKey = (name: string, folder: string) =>
-        folder ? `${folder}/${name}` : name;
-      const audioFilesObj = Object.fromEntries(indexedFiles
-        .filter(({file}) => isRecordingAudioFile(file.displayName, file.type || '', this.settings.supportedTypes))
-        .map(({file, folder}) => [fileKey(file.displayName, folder), file]));
-      const metadataFilesObj = Object.fromEntries(indexedFiles
-        .filter(({file}) => /\.json$/i.test(file.displayName))
-        .map(({file, folder}) => [fileKey(file.displayName, folder), file]));
+      // keep files only (no directories)
+      const allFiles = (await AndroidSAFUtils.listFiles({ directoryUri: this.settings.recordingsDirectoryUri }))?.filter(i => !i.isDirectory);
+
+      // extract supported audio file types and metadata files
+      // (use an Object structure to speed up search)
+      const audioFilesObj = Object.fromEntries(allFiles.filter(i => this.settings.supportedTypes.includes(i.type)).map(i => [ i.displayName, i ]));
+      const metadataFilesObj = Object.fromEntries(allFiles.filter(i => i.displayName.endsWith('.json')).map(i => [ i.displayName, i ]));
 
       // STEP 1: remove deleted files from DB
       // ------------------------------------
       Object.keys(currentDbObj)
-        .filter(fn => shouldPruneCachedAudio(fn, audioFilesObj, scanIncomplete))
+        .filter(fn => !(fn in audioFilesObj))
         .forEach(fn => {
           delete currentDbObj[fn];
         }
@@ -178,24 +128,20 @@ export class RecordingsService {
       // any file?
       if (count > 0) {
         let i = 0;
-        for (const [key, file] of Object.entries(audioFilesObj)) {
-          const sourceFolder = key.slice(0, Math.max(0, key.lastIndexOf('/')));
+        for (const file of files) {
 
           // send progress update
           this.refreshProgress.set(++i / count);
 
           // compose metadata .json filename
           const metadataFileName = replaceExtension(file.displayName, '.json');
-          const metadataFile = metadataFilesObj[
-            sourceFolder ? `${sourceFolder}/${metadataFileName}` : metadataFileName
-          ];
+          const metadataFile = metadataFilesObj[metadataFileName];
 
           // check if current audio file already exists in current DB (compare display names)
-          let dbRecord = currentDbObj[key];
+          let dbRecord = currentDbObj[file.displayName];
           if (dbRecord) {
             // file already exists, update Uris (selected dir could have changed...)
             dbRecord.audioUri = file.uri;
-            dbRecord.sourceFolder = sourceFolder;
             dbRecord.metadataUri = metadataFile?.uri;
             // if file doesn't have JSON metadata and forceFilenameParse === true, then reparse filename
             if (!dbRecord.metadataUri && options?.forceFilenameParse) {
@@ -204,22 +150,8 @@ export class RecordingsService {
           }
           else {
             // add new element to DB
-            try {
-              dbRecord = await Recording.createInstance(file, metadataFile, filenameRegExp);
-            } catch (error) {
-              // One bad metadata/audio entry must not abort the entire history scan.
-              console.warn('Cannot read recording metadata; using filename:', file.displayName, error);
-              try {
-                dbRecord = await Recording.createInstance(file, undefined, filenameRegExp);
-              } catch (fallbackError) {
-                // A single broken file must not hide all subsequent recordings.
-                scanIncomplete = true;
-                console.warn('Cannot index audio; preserving the rest of history:', key, fallbackError);
-                continue;
-              }
-            }
-            dbRecord.sourceFolder = sourceFolder;
-            currentDbObj[key] = dbRecord;
+            dbRecord = await Recording.createInstance(file, metadataFile, filenameRegExp);
+            currentDbObj[file.displayName] = dbRecord;
           }
 
           // update record opName, if needed
@@ -227,7 +159,7 @@ export class RecordingsService {
               || (dbRecord.opName === UNKNOWN_NAME_OR_NUMBER && dbRecord.opNumber !== UNKNOWN_NAME_OR_NUMBER)
               || isPhoneNumber(dbRecord.opName)
           ) {
-            const displayName = pnm?.getDisplayName(dbRecord.opNumber);
+            const displayName = pnm.getDisplayName(dbRecord.opNumber);
             if (displayName) {
               dbRecord.opName = displayName;
             }
@@ -238,14 +170,6 @@ export class RecordingsService {
 
       // update collection & cache
       this.lastUpdate = new Date().getTime();
-      // A partial SAF scan must be retried rather than treated as complete.
-      this.lastFullScan = scanIncomplete ? 0 : this.lastUpdate;
-      this.lastScanIncomplete.set(scanIncomplete);
-      this.lastScanStats.set({
-        files: count,
-        indexed: Object.keys(currentDbObj).length,
-        folders: visited.size,
-      });
       this.recordings.set(Object.values(currentDbObj));
       await this.save(false);
 
@@ -254,8 +178,6 @@ export class RecordingsService {
 
     }
     catch(error: any) {
-      this.lastScanIncomplete.set(true);
-      this.lastFullScan = 0;
       if (error.code === ErrorCode.ERR_INVALID_URI) {
         this.selectRecordingsDirectory(() => this.refreshContent());
       }
@@ -278,34 +200,12 @@ export class RecordingsService {
    * @returns
    */
   private async shallRefresh() {
-    if (!this.settings.recordingsDirectoryUri) return false;
-    // Some SAF providers do not update directory timestamps when files change.
-    if (!this.lastFullScan || Date.now() - this.lastFullScan >= 60_000) return true;
-    if (this.voipDirectoryUri === undefined) {
-      // Resolve the child directory after loading a saved DB, without
-      // eagerly reparsing every audio file on each application launch.
-      const rootFiles = await AndroidSAFUtils.listFiles({
-        directoryUri: this.settings.recordingsDirectoryUri,
-      });
-      this.voipDirectoryUri = rootFiles.find(f =>
-        f.isDirectory && f.displayName === 'VoIP')?.uri ?? null;
+    // get directory last update
+    var lastModified = -1;
+    if (this.settings.recordingsDirectoryUri) {
+      ({ lastModified } = await AndroidSAF.getLastModified({ directoryUri: this.settings.recordingsDirectoryUri }));
     }
-    const root = await AndroidSAF.getLastModified({
-      directoryUri: this.settings.recordingsDirectoryUri,
-    });
-    let lastModified = root.lastModified;
-    if (this.voipDirectoryUri) {
-      try {
-        const child = await AndroidSAF.getLastModified({
-          directoryUri: this.voipDirectoryUri,
-        });
-        lastModified = Math.max(lastModified, child.lastModified);
-      } catch (error) {
-        console.warn('Cannot inspect VoIP folder modification time:', error);
-        // Attempt a normal rescan instead of hiding new recordings.
-        return true;
-      }
-    }
+    //console.warn(`this.lastUpdate < lastModified = ${this.lastUpdate < lastModified} (${this.lastUpdate}, ${lastModified})`);
     return this.lastUpdate < lastModified;
   }
 

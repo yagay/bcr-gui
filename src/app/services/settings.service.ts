@@ -145,7 +145,6 @@ export class SettingsService {
     'audio/mpeg',   // .m4a (deprecated but still used on some ROMs)
     'audio/ogg',
     'audio/x-wav',
-    'audio/wav',
     'audio/amr',
     'audio/amr-wb',
     'audio/amr-wb+',

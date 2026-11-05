@@ -3,26 +3,52 @@
   [actionButtons]="actionButtons"
   [showCustomContent]="isMultiselect()"
 >
+  <!-- custom toolbar content -->
+
+  <!-- stop multiselection -->
   <ion-buttons slot="start">
-    <ion-button (click)="clearSelection()" aria-label="Cancel selection">
-      <ion-icon name="close" slot="icon-only" />
+    <ion-button (click)="clearSelection()">
+      <ion-icon icon="close" slot="icon-only" />
     </ion-button>
   </ion-buttons>
+
+  <!-- action buttons -->
   <ion-buttons slot="end">
-    <ion-button (click)="selectAll()" aria-label="Select all">
+    <ion-button (click)="selectAll()">
       <ion-icon src="/assets/icons/select-all.svg" slot="icon-only" />
     </ion-button>
-    <ion-button (click)="deleteItems(getSelectedItems())" aria-label="Delete selected">
+    <ion-button (click)="deleteItems(getSelectedItems())">
       <ion-icon name="trash" slot="icon-only" />
     </ion-button>
+
+    <!-- actions context menu -->
+    <ion-popover trigger="context-menu-button" [dismissOnSelect]="true">
+      <ng-template>
+        <ion-content>
+          <ion-list lines="none" class="toolbar-menu-items">
+            <ion-item >
+              <ion-icon src="/assets/icons/select-all.svg" />
+              {{ 'LBL_SELECTALL' | translatePipe }}
+            </ion-item>
+            <ion-item (click)="deleteItems(getSelectedItems())">
+              <ion-icon name="trash" />
+              {{ 'LBL_DELETE' | translatePipe }}
+            </ion-item>
+          </ion-list>
+        </ion-content>
+      </ng-template>
+    </ion-popover>
+
   </ion-buttons>
+
 </app-header>
 
+<!-- search panel -->
 @if (isSearch()) {
   <ion-toolbar>
     <ion-searchbar #searchBar
       show-clear-button="focus"
-      [debounce]="500"
+      [debounce]="750"
       [(ngModel)]="searchValue"
       [placeholder]="'LBL_SEARCH' | translatePipe"
       (ionClear)="clearFilter()"
@@ -30,171 +56,135 @@
   </ion-toolbar>
 }
 
-<div class="call-filters" role="group" aria-label="Call type">
-  @for (filter of filterLabels; track filter.key) {
-    <button type="button" class="filter-chip"
-      [class.active]="callFilter() === filter.key"
-      [attr.aria-pressed]="callFilter() === filter.key"
-      (click)="setCallFilter(filter.key)">
-      {{ filterLabel(filter) }}
-    </button>
-  }
-</div>
-<div class="history-counts" role="status" aria-live="polite">
-  <span>{{ isZh ? '索引' : 'Indexed' }}: {{ indexedCount() }}</span>
-  <span>{{ isZh ? '匹配' : 'Filtered' }}: {{ filteredCount() }}</span>
-  <span>{{ isZh ? '显示' : 'Shown' }}: {{ items().length }}</span>
-  <button type="button" class="history-view-button" (click)="toggleRecordView()"
-    [attr.aria-pressed]="showEachRecording()">
-    {{ showEachRecording() ? (isZh ? '按联系人分组' : 'Group by contact')
-      : (isZh ? '显示全部录音' : 'Show every recording') }}
-  </button>
-  @if (recordingsService.lastScanIncomplete()) {
-    <span class="scan-warning">{{ isZh
-      ? '部分目录扫描失败：已保留历史，请刷新重试'
-      : 'Some folders could not be scanned; saved history was preserved. Refresh to retry.' }}</span>
-  }
-</div>
-
-<ion-content id="main-content" class="main-content" [scrollY]="false"
-  [class.disabled]="recordingsService.refreshProgress() !== undefined">
+<!-- main content (list) -->
+<ion-content #content
+  id="main-content"
+  class="ion-padding main-content"
+  [class.disabled]="recordingsService.refreshProgress()"
+  [scrollY]="false"
+>
   <div class="content-wrapper">
-    <ion-list class="items" lines="none">
+
+    <ion-list class="items"
+      lines="full"
+      [class.multiselect]="isMultiselect()"
+      [style.--item-height]="itemHeight + 'px'"
+      [style.--item-gap]="itemGap + 'px'"
+    >
+
       @if (topIndex === 0) {
-        <ion-refresher slot="fixed" (ionRefresh)="refreshList($any($event))">
-          <ion-refresher-content refreshingSpinner="circles" />
+        <ion-refresher
+          slot="fixed"
+          pullFactor=".5"
+          pullMin="60"
+          pullMax="120"
+          (ionRefresh)="refreshList($any($event))"
+        >
+          <ion-refresher-content
+            pullingIcon="refresh"
+            pullingText="{{ 'HOME_PULL_TO_REFRESH' | translatePipe }}"
+            refreshingSpinner="circles"
+            refreshingText="{{ 'HOME_REFRESHING' | translatePipe }}"
+          />
         </ion-refresher>
       }
+      <cdk-virtual-scroll-viewport #vsv
+        class="virtual-scroll-viewport ion-content-scroll-host"
+        [maxBufferPx]="1500"
+        [minBufferPx]="1000"
+        [itemSize]="itemHeight + itemGap"
+        (scrolledIndexChange)="onScroll($event)"
+      >
 
-      <cdk-virtual-scroll-viewport #vsv class="virtual-scroll-viewport ion-content-scroll-host"
-        [itemSize]="itemHeight" (scrolledIndexChange)="onScroll($event)">
-
-        <div class="call-row" *cdkVirtualFor="let item of items(); let index = index; trackBy: trackByUri"
+        <!-- recording item -->
+        <ion-card *cdkVirtualFor="let item of items(); let index = index; trackBy: trackByUri"
+          class="item"
           [class.selected]="item.selected"
-          [class.batch-mode]="isMultiselect()"
-          (click)="openDetails(item)"
-          longPress (longPress)="startMultiselection(item)"
-          role="button" tabindex="0"
-          (keydown.enter)="openDetails(item)"
-          (keydown.space)="openDetails(item); $event.preventDefault()">
-          <div class="avatar"><ion-icon name="person-outline" /></div>
-          <div class="call-summary">
-            <div class="row-top">
-              <span class="caller-name">{{ callerLabel(item) }}</span>
-              @if (!showEachRecording() && getGroupCount(item) > 1) {
-                <span class="group-count">{{ getGroupCount(item) }}</span>
-              }
-            </div>
-            <div class="row-meta">
-              <app-call-icon class="call-direction-icon" [direction]="item.direction ?? ''" />
-              @if (sourceLabel(item)) {
-                <span class="source-label">{{ sourceLabel(item) }}</span>
-              }
-              <span class="call-time">{{ item.date | datetime }}</span>
-              @if (item.duration) { <span>· {{ item.duration | toHms }}</span> }
-            </div>
-            @if (isNewDay(item, index)) {
-              <div class="day-label">{{ dayLabel(item) }}</div>
-            }
-          </div>
-          @if (!isMultiselect()) {
-            <button type="button" class="row-play" (click)="playFromDetails(item); $event.stopPropagation()"
-              [attr.aria-label]="callHistoryLabels.play">
-              <ion-icon name="play-circle-outline" />
-            </button>
-          } @else {
-            <ion-icon class="selection-icon" [name]="item.selected ? 'checkbox' : 'square-outline'" />
-          }
-          <ion-icon name="chevron-forward-outline" class="row-chevron" />
-        </div>
-      </cdk-virtual-scroll-viewport>
-      <app-virtual-scrollbar class="virtual-scrollbar" [virtualScrollViewport]="vsv" />
+        >
+          <div>
 
-      @if (items().length === 0 && recordingsService.refreshProgress() === undefined) {
-        <div class="empty-list">
-          <ion-icon name="call-outline" />
-          <p>{{ callHistoryLabels.empty }}</p>
-        </div>
-      }
+            <!-- card content -->
+            <ion-card-header
+              (click)="onItemClick(item);"
+              longPress
+              (longPress)="startMultiselection(item)"
+            >
+              <ion-card-title class="title">
+                <div class="op-name">{{ item.opName }}</div>
+              </ion-card-title>
+              <ion-card-subtitle class="left-container subtitle">
+                <app-call-icon class="call-direction-icon" [direction]="item?.direction ?? ''" />
+                <span>{{ item?.date | datetime }}</span>
+                @if (item.duration) {
+                  • <span>{{ item.duration | toHms }}</span>
+                }
+              </ion-card-subtitle>
+            </ion-card-header>
+
+            @if (!isMultiselect() && item.selected) {
+              <ion-card-content class="content">
+
+                <div class="details-actions">
+
+                  <!-- details -->
+                  <div class="details">
+                    @if (item.opName !== item.opNumber) {
+                      <p>{{ 'HOME_REC_PHONE_NUMBER' | translatePipe}}: {{ item.opNumber }}</p>
+                    }
+                    <p>{{ 'HOME_REC_TYPE' | translatePipe}}: {{ item.mimeType }}</p>
+                    <p>{{ 'HOME_REC_SIZE' | translatePipe}}: {{ item.filesize | filesize }}</p>
+                  </div>
+
+                  <!-- action buttons -->
+                  <div class="actions">
+
+                    <!-- edit -->
+                    <ion-icon name="pencil"
+                      class="action"
+                      (click)="editItem(item)"
+                    />
+
+                    <!-- share -->
+                    <ion-icon name="share-social"
+                      class="action"
+                      (click)="shareRecording(item, $event)"
+                    />
+
+                    <!-- delete -->
+                    <ion-icon name="trash"
+                      class="action"
+                      (click)="deleteItems([item])"
+                    />
+
+                  </div>
+
+                </div>
+
+              </ion-card-content>
+            }
+
+          </div>
+
+        </ion-card>
+
+      </cdk-virtual-scroll-viewport>
+
+      <app-virtual-scrollbar
+        class="virtual-scrollbar"
+        [virtualScrollViewport]="vsv"
+      />
+
     </ion-list>
 
+    <!-- audio player -->
     @if (selectedItem() && !isMultiselect()) {
-      <div class="mini-player" role="group" aria-label="Recording player">
-        <button type="button" class="mini-player-title"
-          (click)="playerExpanded.set(!playerExpanded())">
-          <ion-icon name="musical-notes-outline" />
-          <span class="mini-player-text">
-            <strong>{{ selectedItem()?.opName || callHistoryLabels.audio }}</strong>
-            <small>{{ selectedItem()!.date | datetime }}</small>
-          </span>
-          <ion-icon [name]="playerExpanded() ? 'chevron-down' : 'chevron-up'" />
-        </button>
-        <button type="button" class="mini-action" (click)="togglePlayback()"
-          [disabled]="!player()?.isReady()" [attr.aria-label]="callHistoryLabels.play">
-          <ion-icon [name]="player()?.isPlaying() ? 'pause' : 'play'" />
-        </button>
-        <button type="button" class="mini-action" (click)="closePlayer()" aria-label="Close player">
-          <ion-icon name="close" />
-        </button>
-      </div>
-      <div class="player-panel" [class.collapsed]="!playerExpanded()">
-        <app-audio-player #audioPlayer
-          class="player"
-          [recording]="selectedItem()!"
-          (onSkip)="onSkip($event)" />
-      </div>
+      <app-audio-player #audioPlayer
+        class="player"
+        [recording]="selectedItem()!"
+        (onSkip)="onSkip($event)"
+      />
     }
-  </div>
-</ion-content>
 
-<!-- Details are separate from the virtual list so row heights never change. -->
-<ion-modal [isOpen]="detailGroupKey() !== undefined"
-  [initialBreakpoint]="0.72" [breakpoints]="[0, 0.72, 1]"
-  (didDismiss)="closeDetails()">
-  <ng-template>
-    <ion-header>
-      <ion-toolbar>
-        <ion-title>{{ detailHeading() }}</ion-title>
-        <ion-buttons slot="end">
-          <ion-button (click)="closeDetails()" aria-label="Close call details">
-            <ion-icon name="close" slot="icon-only" />
-          </ion-button>
-        </ion-buttons>
-      </ion-toolbar>
-    </ion-header>
-    <ion-content>
-      <ion-list lines="inset">
-        @for (entry of detailRecords(); track entry.audioUri) {
-          <ion-item class="history-record">
-            <app-call-icon slot="start" [direction]="entry.direction" />
-            <ion-label>
-              <h2>{{ entry.date | datetime }}</h2>
-              <p>{{ entry.duration | toHms }} · {{ entry.filesize | filesize }}
-                @if (sourceLabel(entry)) { · {{ sourceLabel(entry) }} }
-              </p>
-              @if (isDialableNumber(entry)) {
-                <p><a [href]="getDialUri(entry)" (click)="$event.stopPropagation()">{{ entry.opNumber }}</a></p>
-              }
-            </ion-label>
-            <ion-button fill="clear" slot="end" (click)="playFromDetails(entry)"
-              [attr.aria-label]="callHistoryLabels.play">
-              <ion-icon name="play-circle-outline" slot="icon-only" />
-            </ion-button>
-            <ion-button fill="clear" slot="end" (click)="editItem(entry)"
-              [attr.aria-label]="callHistoryLabels.edit">
-              <ion-icon name="pencil-outline" slot="icon-only" />
-            </ion-button>
-            <ion-button fill="clear" slot="end" (click)="shareRecording(entry, $event)"
-              [attr.aria-label]="callHistoryLabels.share">
-              <ion-icon name="share-social-outline" slot="icon-only" />
-            </ion-button>
-            <ion-button fill="clear" color="danger" slot="end" (click)="deleteItems([entry])"
-              [attr.aria-label]="callHistoryLabels.delete">
-              <ion-icon name="trash-outline" slot="icon-only" />
-            </ion-button>
-          </ion-item>
-        }
-      </ion-list>
-    </ion-content>
-  </ng-template>
-</ion-modal>
+  </div>
+
+</ion-content>
