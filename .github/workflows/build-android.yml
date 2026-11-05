@@ -38,6 +38,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify complete-history scan and cache protections
+        run: |
+          node --experimental-strip-types --test scripts/tests/history-scan.test.mts
+          node scripts/check-history-completeness.mjs
+
       - name: Build Angular frontend and validate call-history templates
         run: npm run build
 
