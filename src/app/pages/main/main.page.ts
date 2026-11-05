@@ -304,8 +304,20 @@ export class MainPage implements AfterViewInit, OnDestroy {
   }
 
   protected rowSelected(item: Recording): boolean {
+    // A tap selects the touched recording only, as in the stable GUI.
     if (!this.isMultiselect()) return this.selectedItem() === item;
-    return selectionState(this.groupActionRecords(item), this.selectedUris()) === 'all';
+    return this.selectedUris().has(item.audioUri);
+  }
+
+  protected groupFullySelected(item: Recording): boolean {
+    return this.isMultiselect() &&
+      selectionState(this.groupActionRecords(item), this.selectedUris()) === 'all';
+  }
+
+  protected toggleGroupSelection(item: Recording): void {
+    if (!this.isMultiselect()) return;
+    this.selectedUris.update(old => setGroupSelection(old, this.groupActionRecords(item)));
+    this.cdr.markForCheck();
   }
 
   protected rowPartSelected(item: Recording): boolean {
@@ -315,7 +327,7 @@ export class MainPage implements AfterViewInit, OnDestroy {
 
   protected onRowClick(item: Recording) {
     if (this.isMultiselect()) {
-      this.selectedUris.update(old => setGroupSelection(old, this.groupActionRecords(item)));
+      this.selectedUris.update(old => setGroupSelection(old, [item]));
       this.cdr.markForCheck();
       return;
     }

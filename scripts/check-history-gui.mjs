@@ -91,6 +91,13 @@ for (const culture of ['en-US', 'zh-Hans', 'zh-Hant']) {
       culture + ' missing ' + key);
   }
 }
+assert(row.includes('groupSelectClicked = output'), 'Group selection must be a separate intentional control');
+assert(controller.includes('setGroupSelection(old, [item])'), 'Row taps must only select that recording');
+const groupService = read('src/app/features/recording-groups/recording-groups.service.ts');
+assert(groupService.includes('group.sort((a, b) => b.date - a.date)'),
+  'Contact representative must be the most recent recording');
+assert(groupService.indexOf('const name =') < groupService.indexOf('let number ='),
+  'Stable GUI contact grouping must prioritize display names');
 assert(!row.includes("navigator.language") && !controls.includes("navigator.language"),
   'UI must not bypass the configured app language');
 console.log('Recording GUI architecture checks passed.');

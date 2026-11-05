@@ -49,10 +49,12 @@
               [groupCount]="showAllRecordings() ? 1 : getGroupCount(entry.recording)"
               [expanded]="expandedGroupKey() === getGroupKey(entry.recording)"
               [selected]="rowSelected(entry.recording)" [partial]="rowPartSelected(entry.recording)"
+              [groupSelected]="groupFullySelected(entry.recording)"
               [playing]="isRowPlaying(entry.recording)"
               [multiselect]="isMultiselect()"
               (opened)="onRowClick(entry.recording)" (playClicked)="onPlayRow(entry.recording)"
               (expandedClicked)="toggleGroup(entry.recording)"
+              (groupSelectClicked)="toggleGroupSelection(entry.recording)"
               (longPressed)="startMultiselection(entry.recording)" />
           } @else {
             <app-history-inline-player

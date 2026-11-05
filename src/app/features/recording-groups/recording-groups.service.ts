@@ -13,7 +13,7 @@ import { Injectable, signal } from '@angular/core';
 export class RecordingGroupsService {
   readonly expandedGroupKey = signal<string | undefined>(undefined);
 
-  buildGroups(recordings: Recording[], defaultCountryPrefix: string, sortMode: SortModeEnum = SortModeEnum.Date_DESC): Map<string, Recording[]> {
+  buildGroups(recordings: Recording[], defaultCountryPrefix: string, _sortMode: SortModeEnum = SortModeEnum.Date_DESC): Map<string, Recording[]> {
     const groups = new Map<string, Recording[]>();
 
     for (const recording of recordings) {
@@ -23,12 +23,9 @@ export class RecordingGroupsService {
       groups.set(key, group);
     }
 
-    // A collapsed header is always the first item according to the active
-    // sort mode, and expanded children follow the same ordering.
-    groups.forEach(group => {
-      const sorted = sortRecordings(group, sortMode);
-      group.splice(0, group.length, ...sorted);
-    });
+    // Match the stable GUI: each contact header is its most recent call.
+    // Global sorting only changes the order of contact groups.
+    groups.forEach(group => group.sort((a, b) => b.date - a.date));
     return groups;
   }
 
@@ -53,21 +50,20 @@ export class RecordingGroupsService {
   }
 
   getGroupKey(recording: Recording, defaultCountryPrefix: string): string {
-    // Phone identity wins over display name. Contact names can change and
-    // different callers can share the same label; neither should corrupt groups.
-    let number = isPhoneNumber(recording.opNumber)
-      ? cleanupPhoneNumber(recording.opNumber) : '';
-    const prefix = cleanupPhoneNumber(defaultCountryPrefix);
-    if (prefix && number.startsWith('0')) number = prefix + number.substring(1);
-    if (number) return `number:${number}`;
-
-    const name = (recording.opName || '').trim().normalize('NFKC')
-      .replace(/\s+/g, ' ').toLocaleLowerCase();
+    const name = recording.opName.trim().normalize('NFKC').replace(/\s+/g, ' ').toLocaleLowerCase();
     if (name && name !== UNKNOWN_NAME_OR_NUMBER && !isPhoneNumber(recording.opName)) {
       return `name:${name}`;
     }
-    // Unknown/private calls are unrelated unless there is stable identity.
-    return `recording:${recording.audioUri}`;
+
+    let number = cleanupPhoneNumber(recording.opNumber);
+    const prefix = cleanupPhoneNumber(defaultCountryPrefix);
+
+    if (prefix && number.startsWith('0')) {
+      number = prefix + number.substring(1);
+    }
+
+    // Never merge all private/unknown calls into one unrelated contact.
+    return number ? `number:${number}` : `recording:${recording.audioUri}`;
   }
 
   isGroupHeader(

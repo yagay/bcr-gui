@@ -65,19 +65,19 @@ describe('original recording history invariants', () => {
   });
 });
 
-describe('caller identity stability', () => {
+describe('stable GUI caller identity parity', () => {
   const svc = new RecordingGroupsService();
   const make = (uri: string, number: string, name: string) => {
     const rec = new Recording();
     rec.audioUri = uri; rec.opNumber = number; rec.opName = name; rec.date = 1000;
     return rec;
   };
-  it('groups one phone even when the contact name changes', () => {
-    const records = [make('a', '+447700900123', 'Old name'), make('b', '+447700900123', 'New name')];
+  it('groups two numbers under one named contact as the stable GUI did', () => {
+    const records = [make('a', '+447700900123', 'Reception'), make('b', '+447700900124', 'Reception')];
     expect(svc.buildGroups(records, '').size).toBe(1);
   });
-  it('does not merge callers just because they share a name', () => {
-    const records = [make('a', '+447700900123', 'Reception'), make('b', '+447700900124', 'Reception')];
+  it('keeps different named contacts separate even when their phone matches', () => {
+    const records = [make('a', '+447700900123', 'Old name'), make('b', '+447700900123', 'New name')];
     expect(svc.buildGroups(records, '').size).toBe(2);
   });
   it('isolates hidden or private numbers with no stable identifier', () => {
@@ -123,17 +123,17 @@ describe('consistent grouped sorting', () => {
   const recent = rec('recent', 200, 30, '+447700123456');
   const unrelated = rec('other', 150, 60, '+447700123457');
   afterEach(() => service.expandedGroupKey.set(undefined));
-  it('respects ascending date both for contact header and expanded items', () => {
+  it('sorts contact headers ascending while keeping newest call first within each group', () => {
     const groups = service.buildGroups([recent, unrelated, older], '', SortModeEnum.Date_ASC);
     service.expand(older, '');
     const rows = projectRecordingHistory(groups, service, SortModeEnum.Date_ASC, '');
-    expect(rows).toEqual([older, recent, unrelated]);
+    expect(rows).toEqual([unrelated, recent, older]);
   });
-  it('respects descending duration within a contact', () => {
+  it('sorts contacts using the latest call duration without changing their representative', () => {
     const groups = service.buildGroups([recent, older], '', SortModeEnum.Duration_DESC);
     service.expand(older, '');
     const rows = projectRecordingHistory(groups, service, SortModeEnum.Duration_DESC, '');
-    expect(rows).toEqual([older, recent]);
+    expect(rows).toEqual([recent, older]);
   });
 });
 

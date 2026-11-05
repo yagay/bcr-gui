@@ -33,7 +33,17 @@ import { I18nService } from 'src/app/services/i18n.service';
         </div>
       </div>
       @if (multiselect()) {
-        <span class="selection-indicator" [class.checked]="selected()" [class.partial]="partial()">{{ selected() ? '✓' : partial() ? '−' : '' }}</span>
+        @if (isHeader() && groupCount() > 1) {
+          <button type="button" class="group-select" (click)="groupSelectClicked.emit(); $event.stopPropagation()"
+            [attr.aria-label]="groupSelected()
+              ? i18n.get('HISTORY_DESELECT_GROUP') : i18n.get('HISTORY_SELECT_GROUP')"
+            [attr.aria-pressed]="groupSelected()">
+            <span class="selection-indicator" [class.checked]="groupSelected()" [class.partial]="partial()">
+              {{ groupSelected() ? '✓' : partial() ? '−' : '' }}
+            </span>
+          </button>
+        }
+        <span class="selection-indicator" [class.checked]="selected()">{{ selected() ? '✓' : '' }}</span>
       } @else {
         @if (isHeader() && groupCount() > 1) {
           <button type="button" class="expand" (click)="expandedClicked.emit(); $event.stopPropagation()"
@@ -74,6 +84,7 @@ import { I18nService } from 'src/app/services/i18n.service';
     .selection-indicator {height:22px;width:22px;flex:0 0 22px;border:2px solid var(--ion-color-step-500);
       border-radius:6px;display:grid;place-items:center;font-size:14px;}
     .selection-indicator.partial {border-color:var(--ion-color-primary);color:var(--ion-color-primary);}
+    .group-select {flex:0 0 38px;min-width:38px;height:44px;display:grid;place-items:center;}
     .selection-indicator.checked {background:var(--ion-color-primary);color:var(--ion-color-primary-contrast);border-color:var(--ion-color-primary);}
   `]
 })
@@ -84,12 +95,14 @@ export class HistoryRecordingRowComponent {
   readonly expanded = input(false);
   readonly selected = input(false);
   readonly partial = input(false);
+  readonly groupSelected = input(false);
   readonly playing = input(false);
   readonly multiselect = input(false);
   protected readonly i18n = inject(I18nService);
   readonly opened = output<void>();
   readonly playClicked = output<void>();
   readonly expandedClicked = output<void>();
+  readonly groupSelectClicked = output<void>();
   readonly longPressed = output<void>();
 
   private suppressClick = false;
