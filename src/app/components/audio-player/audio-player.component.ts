@@ -122,11 +122,6 @@ export class AudioPlayerComponent implements OnDestroy {
         }
         this.duration.set(rec.duration);
 
-        // set initial playback speed (if !== 1)
-        if (this.settings.playbackSpeed !== 1) {
-          await AudioPlayer.setPlaybackSpeed({ playbackSpeed: this.settings.playbackSpeed });
-        }
-
         // subscribe to player ready event
         this.removePlayerReadyListener = (await AudioPlayer.addListener('playerReady', async () => {
           this.status.set(PlayerStatusEnum.Paused);
@@ -159,6 +154,11 @@ export class AudioPlayerComponent implements OnDestroy {
           keepAwakeWhenPlaying: this.settings.keepAwakeWhenPlaying,
           // notificationText: this.dateTimePipe.transform(r.date, this.settings.dateTimeFormat),
         });
+
+        // set initial playback speed (if !== 1)
+        if (this.settings.playbackSpeed !== 1) {
+          await AudioPlayer.setPlaybackSpeed({ playbackSpeed: this.settings.playbackSpeed });
+        }
 
         // workaround needed to let Angular update values...
         this.cdr.detectChanges();
