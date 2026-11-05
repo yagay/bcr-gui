@@ -92,20 +92,6 @@
   .call-row { transition: none; }
 }
 
-/* Readable totals without changing the original flat-history layout. */
-.history-counts {
-  display:flex;
-  flex-wrap:wrap;
-  gap:6px 12px;
-  padding:4px 12px;
-  font-size:11px;
-  border-bottom:1px solid var(--ion-color-step-150);
-}
-.history-view-button {
-  margin-left:auto;
-  border:1px solid var(--ion-color-step-250);
-  border-radius:8px;
-  background:transparent;
-  color:var(--ion-color-primary);
-}
-.scan-warning {width:100%;color:var(--ion-color-danger);}
+.history-counts{display:flex;flex-wrap:wrap;gap:7px;padding:5px 12px;font-size:11px}
+.history-view-button{margin-left:auto;color:var(--ion-color-primary)}
+.scan-warning{color:var(--ion-color-danger);flex-basis:100%}
