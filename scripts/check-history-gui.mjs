@@ -59,9 +59,9 @@ const datePipe = read('src/app/pipes/datetime.pipe.ts');
 const oldKeys = ['HOME_REC_PHONE_NUMBER', 'HOME_REC_TYPE', 'HOME_REC_SIZE'];
 for (const key of oldKeys) assert(details.includes(key), 'Original recording detail missing: ' + key);
 assert(row.includes('recording().date | datetime'),
-  'List dates must honor the user's date/time format settings');
+  "List dates must honor the user's date/time format settings");
 assert(details.includes('recording().date | datetime'),
-  'Detail dates must honor the user's date/time format settings');
+  "Detail dates must honor the user's date/time format settings");
 assert(datePipe.includes('this.settings.dateTimeFormat'),
   'Configured date/time formats are no longer in use');
 assert(datePipe.includes('this.settings.culture'),
