@@ -1,19 +1,67 @@
 import type { Recording } from '../../models/recording';
 
-/** One CDK index = one fixed-height row. Playback never changes recording-row geometry. */
-export type HistoryDisplayRow =
-  | { kind: 'recording'; recording: Recording; key: string }
-  | { kind: 'player'; recording: Recording; key: string };
+/** Actual physical height of each virtual item; no CSS overlap or guessed fixed itemSize. */
+export const HISTORY_ROW_HEIGHT = { contact: 80, child: 48, detail: 170, player: 90 } as const;
 
-export function buildDisplayRows(recordings: Recording[], activeUri?: string): HistoryDisplayRow[] {
+export type HistoryDisplayRow =
+  | { kind: 'recording'; recording: Recording; key: string; height: number; isChild: boolean }
+  | { kind: 'detail'; recording: Recording; key: string; height: number }
+  | { kind: 'player'; recording: Recording; key: string; height: number };
+
+export interface HistoryDisplayOptions {
+  isChild?: (recording: Recording) => boolean;
+  showDetails?: boolean;
+  detailHeight?: number;
+  playerHeight?: number;
+}
+
+/** Single projection for both the visible UI and the virtualization geometry. */
+export function buildDisplayRows(
+  recordings: Recording[],
+  activeUri?: string,
+  options: HistoryDisplayOptions = {},
+): HistoryDisplayRow[] {
   const rows: HistoryDisplayRow[] = [];
   for (const recording of recordings) {
-    rows.push({ kind: 'recording', recording, key: recording.audioUri });
+    const isChild = options.isChild?.(recording) ?? false;
+    rows.push({
+      kind: 'recording', recording, key: recording.audioUri, isChild,
+      height: options.isChild ? (isChild ? HISTORY_ROW_HEIGHT.child : HISTORY_ROW_HEIGHT.contact) : 78,
+    });
     if (activeUri === recording.audioUri) {
-      rows.push({ kind: 'player', recording, key: 'player:' + recording.audioUri });
+      if (options.showDetails) {
+        rows.push({
+          kind: 'detail', recording, key: 'detail:' + recording.audioUri,
+          height: options.detailHeight ?? HISTORY_ROW_HEIGHT.detail,
+        });
+      }
+      rows.push({
+        kind: 'player', recording, key: 'player:' + recording.audioUri,
+        height: options.playerHeight ?? (options.isChild ? HISTORY_ROW_HEIGHT.player : 78),
+      });
     }
   }
   return rows;
+}
+
+/** Prefix sum helpers used by scrolling, screen intersection and tests. */
+export function historyRowOffsets(rows: readonly HistoryDisplayRow[]): number[] {
+  const offsets = [0];
+  for (const row of rows) offsets.push(offsets[offsets.length - 1] + row.height);
+  return offsets;
+}
+
+export function historyIndexAtOffset(offsets: readonly number[], pixel: number): number {
+  if (offsets.length < 2) return 0;
+  let low = 0, high = offsets.length - 2;
+  const target = Math.max(0, pixel);
+  while (low <= high) {
+    const middle = (low + high) >>> 1;
+    if (offsets[middle + 1] <= target) low = middle + 1;
+    else if (offsets[middle] > target) high = middle - 1;
+    else return middle;
+  }
+  return Math.min(low, offsets.length - 2);
 }
 
 /** A contact header selects a group; a child row always selects only itself. */
@@ -47,8 +95,9 @@ export function inlineRowOnScreen(
   if (!activeUri || viewportHeight <= 0 || rowHeight <= 0) return false;
   const index = rows.findIndex(row => row.key === 'player:' + activeUri);
   if (index < 0) return false;
-  const firstPixel = index * rowHeight;
-  const lastPixel = firstPixel + rowHeight;
+  const offsets = historyRowOffsets(rows);
+  const firstPixel = offsets[index];
+  const lastPixel = offsets[index + 1];
   return firstPixel >= scrollTop + 1 && lastPixel <= scrollTop + viewportHeight - 1;
 }
 
