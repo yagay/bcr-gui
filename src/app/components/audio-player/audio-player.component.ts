@@ -57,12 +57,27 @@ export class AudioPlayerComponent implements OnDestroy {
   private recordingsService = inject(RecordingsService);
   protected settings = inject(SettingsService);
 
+  // Serialize native player transitions. Angular effects can fire while the
+  // previous native load/unload is still running, so never run them in parallel.
+  private playerTransition: Promise<void> = Promise.resolve();
+  private requestedGeneration = 0;
+  private destroyed = false;
+
   constructor() {
     effect(() => {
-      untracked(async () => await this.unload());
-      if (this.recording()) {
-        untracked(async () => await this.load(this.recording()));
-      }
+      const recording = this.recording();
+      const generation = ++this.requestedGeneration;
+      this.ready.set(false);
+      this.status.set(PlayerStatusEnum.Paused);
+      this.playerTransition = this.playerTransition
+        .catch(error => this.showError(error, 'previous transition'))
+        .then(async () => {
+          if (this.destroyed) return;
+          await this.unload();
+          if (!this.destroyed && generation === this.requestedGeneration) {
+            await this.load(recording);
+          }
+        });
     });
   }
 
@@ -76,7 +91,9 @@ export class AudioPlayerComponent implements OnDestroy {
   // }
 
   async ngOnDestroy() {
-    // release asset
+    this.destroyed = true;
+    ++this.requestedGeneration;
+    await this.playerTransition.catch(() => {});
     await this.unload();
     this._androidEventsSubs.unsubscribe();
   }
@@ -104,14 +121,6 @@ export class AudioPlayerComponent implements OnDestroy {
           await this.recordingsService.save();
         }
         this.duration.set(rec.duration);
-
-        await AudioPlayer.load({
-          fileUri: rec.audioUri,
-          notificationTitle: rec.opName,
-          enableEarpiece: this.settings.enableEarpiece,
-          keepAwakeWhenPlaying: this.settings.keepAwakeWhenPlaying,
-          // notificationText: this.dateTimePipe.transform(r.date, this.settings.dateTimeFormat),
-        });
 
         // set initial playback speed (if !== 1)
         if (this.settings.playbackSpeed !== 1) {
@@ -141,6 +150,16 @@ export class AudioPlayerComponent implements OnDestroy {
           this.progress.set(Math.floor(res.position / 1000));
         })).remove;
 
+        // Register native listeners BEFORE load to avoid missing an immediate
+        // playerReady callback from a fast/native cached recording.
+        await AudioPlayer.load({
+          fileUri: rec.audioUri,
+          notificationTitle: rec.opName,
+          enableEarpiece: this.settings.enableEarpiece,
+          keepAwakeWhenPlaying: this.settings.keepAwakeWhenPlaying,
+          // notificationText: this.dateTimePipe.transform(r.date, this.settings.dateTimeFormat),
+        });
+
         // workaround needed to let Angular update values...
         this.cdr.detectChanges();
 
@@ -164,6 +183,9 @@ export class AudioPlayerComponent implements OnDestroy {
     await this.removePlayerReadyListener?.();
     await this.removePlayCompletedListener?.();
     await this.removePlayerUpdateListener?.();
+    this.removePlayerReadyListener = undefined;
+    this.removePlayCompletedListener = undefined;
+    this.removePlayerUpdateListener = undefined;
     this.cdr.detectChanges(); // workaround needed to let Angular update values...
 
   }
@@ -201,6 +223,7 @@ export class AudioPlayerComponent implements OnDestroy {
    */
   async play() {
 
+    if (!this.ready() || this.destroyed) return;
     return AudioPlayer.play()
       .then(async _ => {
         this.status.set(PlayerStatusEnum.Playing);
