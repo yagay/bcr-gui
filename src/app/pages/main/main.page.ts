@@ -87,8 +87,8 @@ export class MainPage implements AfterViewInit {
   protected items = this.listStore.items;
 
   protected topIndex = 0; // index of top shown recording
-  protected itemHeight = 78;
-  protected itemGap = 12;
+  protected itemHeight = 68;
+  protected itemGap = 4;
 
   private player = viewChild(AudioPlayerComponent);
   private scrollViewport = viewChild(CdkVirtualScrollViewport);
@@ -190,6 +190,11 @@ export class MainPage implements AfterViewInit {
     this.clearSelection();
     try {
       await this.recordingsService.refreshContent();
+      const activeUri = this.selectedItem()?.audioUri;
+      if (activeUri && !this.recordingsService.recordings().some(r => r.audioUri === activeUri)) {
+        ++this.playRequest;
+        this.selectedItem.set(undefined);
+      }
     } finally {
       await event?.target.complete();
     }
@@ -277,8 +282,8 @@ export class MainPage implements AfterViewInit {
    * Deletes the given recording file (and its companion JSON metadata)
    */
   async deleteItems(items: Recording[]) {
-
-    this.player()?.pause();
+    if (!items.length) return;
+    await this.player()?.pause();
 
     // show confirmation alert
     await this.mbs.showConfirm({
@@ -290,9 +295,9 @@ export class MainPage implements AfterViewInit {
         const deletingActive = items.some(i => i.audioUri === this.selectedItem()?.audioUri);
         if (deletingActive) {
           ++this.playRequest;
+          await this.player()?.unload();
           this.selectedItem.set(undefined);
         }
-        await this.player()?.unload();
         this.progressMessage.set(`0 / ${items.length}`);
         await this.recordingsService.deleteRecording(items, (deleted, total) => {
           this.progressMessage.set(`${deleted} / ${total}`);
