@@ -1,7 +1,7 @@
 import type { Recording } from '../../models/recording';
 
 /** Actual physical height of each virtual item; no CSS overlap or guessed fixed itemSize. */
-export const HISTORY_ROW_HEIGHT = { contact: 80, child: 48, detail: 170, player: 90 } as const;
+export const HISTORY_ROW_HEIGHT = { contact: 90, child: 56, detail: 140, player: 90 } as const;
 
 export type HistoryDisplayRow =
   | { kind: 'recording'; recording: Recording; key: string; height: number; isChild: boolean }
@@ -13,6 +13,10 @@ export interface HistoryDisplayOptions {
   showDetails?: boolean;
   detailHeight?: number;
   playerHeight?: number;
+  /** Render old-style card details inside the same virtual item. */
+  inlineDetails?: boolean;
+  /** False when the original bottom audio player is displayed. */
+  showPlayer?: boolean;
 }
 
 /** Single projection for both the visible UI and the virtualization geometry. */
@@ -24,21 +28,28 @@ export function buildDisplayRows(
   const rows: HistoryDisplayRow[] = [];
   for (const recording of recordings) {
     const isChild = options.isChild?.(recording) ?? false;
+    const isActive = activeUri === recording.audioUri;
+    const baseHeight = options.isChild
+      ? (isChild ? HISTORY_ROW_HEIGHT.child : HISTORY_ROW_HEIGHT.contact) : 78;
+    const inlineDetailsHeight = isActive && options.showDetails && options.inlineDetails
+      ? options.detailHeight ?? HISTORY_ROW_HEIGHT.detail : 0;
     rows.push({
       kind: 'recording', recording, key: recording.audioUri, isChild,
-      height: options.isChild ? (isChild ? HISTORY_ROW_HEIGHT.child : HISTORY_ROW_HEIGHT.contact) : 78,
+      height: baseHeight + inlineDetailsHeight,
     });
-    if (activeUri === recording.audioUri) {
-      if (options.showDetails) {
+    if (isActive) {
+      if (options.showDetails && !options.inlineDetails) {
         rows.push({
           kind: 'detail', recording, key: 'detail:' + recording.audioUri,
           height: options.detailHeight ?? HISTORY_ROW_HEIGHT.detail,
         });
       }
-      rows.push({
-        kind: 'player', recording, key: 'player:' + recording.audioUri,
-        height: options.playerHeight ?? (options.isChild ? HISTORY_ROW_HEIGHT.player : 78),
-      });
+      if (options.showPlayer !== false) {
+        rows.push({
+          kind: 'player', recording, key: 'player:' + recording.audioUri,
+          height: options.playerHeight ?? (options.isChild ? HISTORY_ROW_HEIGHT.player : 78),
+        });
+      }
     }
   }
   return rows;
