@@ -34,19 +34,17 @@ import { FilesizePipe } from 'src/app/pipes/filesize.pipe';
         <span><strong>{{ i18n.get('HOME_REC_SIZE') }}:</strong> {{ recording().filesize | filesize }}</span>
       </div>
       <div class="actions">
-        @if (dialUri()) {
-          <a [href]="dialUri()" class="action" [attr.aria-label]="i18n.get('HISTORY_CALL')">
-            <ion-icon name="call-outline" />{{ i18n.get('HISTORY_CALL') }}
-          </a>
-        }
-        <button type="button" class="action" (click)="edit.emit()">
-          <ion-icon name="pencil-outline" />{{ i18n.get('LBL_EDIT') }}
+        <button type="button" class="action" (click)="edit.emit()"
+          [attr.aria-label]="i18n.get('LBL_EDIT')">
+          <ion-icon name="pencil-outline" />
         </button>
-        <button type="button" class="action" (click)="share.emit()">
-          <ion-icon name="share-outline" />{{ i18n.get('HISTORY_SHARE') }}
+        <button type="button" class="action" (click)="share.emit()"
+          [attr.aria-label]="i18n.get('HISTORY_SHARE')">
+          <ion-icon name="share-outline" />
         </button>
-        <button type="button" class="action" (click)="delete.emit()">
-          <ion-icon name="trash-outline" />{{ i18n.get('LBL_DELETE') }}
+        <button type="button" class="action" (click)="delete.emit()"
+          [attr.aria-label]="i18n.get('LBL_DELETE')">
+          <ion-icon name="trash-outline" />
         </button>
       </div>
     </section>
@@ -64,13 +62,15 @@ import { FilesizePipe } from 'src/app/pipes/filesize.pipe';
       margin-top:4px;font-size:11px;}
     .phone-line {display:flex;gap:5px;flex:1 0 100%;align-items:center;min-width:0;flex-wrap:wrap;}
     .phone-line a {color:var(--ion-color-primary);text-decoration:none;overflow-wrap:anywhere;}
+    :host(.is-child) .details {margin-left:34px;}
     .actions {display:flex;align-items:center;justify-content:flex-end;
       gap:6px;overflow-x:auto;margin-top:10px;padding-block:3px;}
     .action {display:inline-flex;align-items:center;justify-content:center;gap:5px;
       flex:1 0 auto;padding:7px 10px;border:1px solid var(--ion-color-step-200);
       border-radius:8px;background:var(--ion-background-color);color:var(--ion-color-primary);
       font-size:12px;text-decoration:none;white-space:nowrap;}
-    .action ion-icon {font-size:17px;}
+    .action ion-icon {font-size:21px;}
+    .action {flex:0 0 44px;min-width:44px;min-height:44px;padding:0;}
     .action {min-height:40px;box-sizing:border-box;}
     @media(max-width:360px) {
       .details {margin-inline:7px;padding-inline:10px;}

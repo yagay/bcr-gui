@@ -20,6 +20,7 @@ export type HistoryDirection = 'all' | 'in' | 'out' | 'voip';
           [attr.aria-label]="i18n.get('HISTORY_RESET_FILTERS')">×</button>
       </div>
     }
+    @if (filtersVisible()) {
     <div class="filter-row">
       <nav class="direction-row" [attr.aria-label]="i18n.get('HISTORY_FILTER_DIRECTION')">
         @for (option of directions; track option.key) {
@@ -67,6 +68,7 @@ export type HistoryDirection = 'all' | 'in' | 'out' | 'voip';
         }
       </div>
     }
+    }
     @if (hasFilter()) {
       <span class="sr-only" aria-live="polite">
         {{ i18n.get('HISTORY_MATCHES') }} {{ matches() }}
@@ -113,6 +115,11 @@ export class HistoryControlsComponent implements OnDestroy {
   protected readonly i18n = inject(I18nService);
   private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('historySearch');
   protected readonly searchVisible = signal(false);
+  protected readonly filtersVisible = signal(false);
+  public toggleFilters(): void {
+    this.filtersVisible.update(open => !open);
+    if (!this.filtersVisible()) this.showOptions.set(false);
+  }
   protected readonly showOptions = signal(false);
   protected toggleOptions(): void { this.showOptions.update(open => !open); }
   readonly search = input('');

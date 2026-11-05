@@ -70,13 +70,15 @@
               (groupSelectClicked)="toggleGroupSelection(entry.recording)"
               (longPressed)="startMultiselection(entry.recording)" />
           } @else if (entry.kind === 'detail') {
-            <app-history-details class="inline-history-detail" [style.height.px]="entry.height"
+            <app-history-details class="inline-history-detail" [class.is-child]="!showAllRecordings() && !isGroupHeader(entry.recording)"
+              [style.height.px]="entry.height"
               [recording]="entry.recording"
               [dialUri]="isDialableNumber(entry.recording) ? getDialUri(entry.recording) : null"
               (close)="clearSelection()" (edit)="editItem(entry.recording)"
               (share)="shareRecording(entry.recording)" (delete)="deleteItems([entry.recording])" />
           } @else {
-            <app-history-inline-player class="inline-history-player" [style.height.px]="entry.height"
+            <app-history-inline-player class="inline-history-player" [class.is-child]="!showAllRecordings() && !isGroupHeader(entry.recording)"
+              [style.height.px]="entry.height"
               [position]="inlineProgress()" [duration]="inlineDuration()"
               [playing]="inlinePlaying()" [ready]="inlineReady()" [failed]="inlineFailed()"
               [speed]="playbackSpeed()" [seekSeconds]="settings.seekTime"

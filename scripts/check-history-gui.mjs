@@ -66,8 +66,9 @@ assert(page.includes('(edit)="editItem(entry.recording)"') &&
 assert(page.includes('[actionButtons]="actionButtons"') &&
   controller.includes('this.historyControls()?.toggleSearch()') &&
   controls.includes('nativeElement.focus()'), 'Original header search / autofocus lost');
-assert(controls.includes('showOptions = signal(false)') && controls.includes('directionChange = output'),
-  'New direction/sort tools must be available but not consume permanent vertical space');
+assert(controls.includes('showOptions = signal(false)') && controls.includes('filtersVisible = signal(false)') &&
+  controls.includes('directionChange = output') && controller.includes('toggleFilters()'),
+  'Directions, sorting and modes must be accessible from a compact header control');
 assert(controller.includes('private selectedUris = signal') &&
   controller.includes('setGroupSelection(old, [item])') &&
   row.includes('groupSelectClicked = output'),

@@ -79,7 +79,7 @@ import { I18nService } from 'src/app/services/i18n.service';
       border-left:3px solid var(--ion-color-step-350);
       background:var(--ion-color-step-50);box-shadow:none;}
     .history-entry.is-selected {background:var(--ion-item-background-selected,var(--ion-color-step-100));
-      border:2px solid var(--ion-color-primary);
+      border:2px solid var(--ion-color-primary);border-radius:10px 10px 0 0;
       box-shadow:0 0 0 1px var(--ion-color-primary);}
     .entry-body {min-width:0;flex:1;display:flex;flex-direction:column;gap:7px;}
     .entry-heading,.entry-subtitle {display:flex;align-items:center;gap:7px;min-width:0;}

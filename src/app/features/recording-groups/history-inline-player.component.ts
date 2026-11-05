@@ -54,6 +54,7 @@ import { ToHmsPipe } from 'src/app/pipes/to-hms.pipe';
     .inline-player {height:100%;box-sizing:border-box;background:var(--ion-color-step-50);
       border-bottom:1px solid var(--ion-color-step-200);padding:8px 8px 6px;
       display:flex;flex-direction:column;gap:3px;}
+    :host(.is-child) .inline-player {margin-left:34px;width:calc(100% - 34px);}
     .timeline {display:flex;gap:8px;align-items:center;height:32px;font-size:11px;color:var(--ion-color-step-700);}
     .timeline ion-range {min-width:0;flex:1;height:28px;padding:0;--bar-height:4px;--knob-size:16px;--pin-background:var(--ion-color-primary);}
     .buttons {height:42px;display:flex;justify-content:space-between;align-items:center;gap:2px;}

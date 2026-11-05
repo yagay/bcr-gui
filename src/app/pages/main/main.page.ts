@@ -73,11 +73,19 @@ export class MainPage implements AfterViewInit, OnDestroy {
   private scrollOffsetPx = signal(0);
   private viewportHeightPx = signal(0);
   // Restore the original header search affordance while keeping new filters below.
-  protected actionButtons: ActionButton[] = [{
-    icon: () => this.searchValue() ? 'search-circle' : 'search-circle-outline',
-    visible: () => !this.isMultiselect(),
-    onClick: () => this.historyControls()?.toggleSearch(),
-  }];
+  protected actionButtons: ActionButton[] = [
+    {
+      icon: () => this.searchValue() ? 'search-circle' : 'search-circle-outline',
+      visible: () => !this.isMultiselect(),
+      onClick: () => this.historyControls()?.toggleSearch(),
+    },
+    {
+      icon: () => this.directionFilter() !== 'all' || this.showAllRecordings()
+        ? 'options' : 'options-outline',
+      visible: () => !this.isMultiselect(),
+      onClick: () => this.historyControls()?.toggleFilters(),
+    },
+  ];
   selectedItem = signal<Recording | undefined>(undefined);
   protected recordingGroups = inject(RecordingGroupsService);
   protected expandedGroupKey = this.recordingGroups.expandedGroupKey;
