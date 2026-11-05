@@ -20,6 +20,7 @@ import { SettingsService } from './settings.service';
 export class RecordingsService {
 
   initialized = false;
+  private resumeListenerAttached = false;
 
   // recordings database
   public recordings = signal<Recording[]>([]);
@@ -66,11 +67,14 @@ export class RecordingsService {
     }
 
     // refresh database when the app is resumed
-    this.platform.resume.subscribe(async () => {
-      if (await this.shallRefresh()) {
-        this.refreshContent();
-      }
-    });
+    if (!this.resumeListenerAttached) {
+      this.resumeListenerAttached = true;
+      this.platform.resume.subscribe(async () => {
+        if (this.initialized && this.refreshProgress() === undefined && await this.shallRefresh()) {
+          await this.refreshContent();
+        }
+      });
+    }
 
   }
 
