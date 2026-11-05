@@ -35,7 +35,7 @@ export type HistoryDirection = 'all' | 'in' | 'out' | 'voip';
           (click)="refresh.emit()" [attr.aria-label]="i18n.get('HISTORY_REFRESH')">
           {{ refreshing() ? '◌' : '↻' }}
         </button>
-        <button type="button" class="more" (click)="showOptions.update(v => !v)"
+        <button type="button" class="more" (click)="toggleOptions()"
           [attr.aria-expanded]="showOptions()"
           [attr.aria-label]="i18n.get('MAINMENU_MENU_TITLE')">
           {{ showOptions() ? '⌃' : '⋯' }}
@@ -114,6 +114,7 @@ export class HistoryControlsComponent implements OnDestroy {
   private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('historySearch');
   protected readonly searchVisible = signal(false);
   protected readonly showOptions = signal(false);
+  protected toggleOptions(): void { this.showOptions.update(open => !open); }
   readonly search = input('');
   readonly searchChange = output<string>();
   readonly resetAll = output<void>();
