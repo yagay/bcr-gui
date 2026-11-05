@@ -16,6 +16,7 @@ import { ContactsService } from '@app/services/contacts.service';
 import { I18nService } from '@app/services/i18n.service';
 import { MessageBoxService } from '@app/services/message-box.service';
 import { RecordingsService } from '@app/services/recordings.service';
+import { DirectionFilter, RecordingListStore } from '@app/services/recording-list.store';
 import { SettingsService } from '@app/services/settings.service';
 import { filterList } from '@app/utils/filterList';
 import { getE164Number } from '@app/utils/phoneNumbers';
@@ -64,14 +65,23 @@ import version from '../../version';
   ],
   providers: [
     DatetimePipe,
+    RecordingListStore,
   ],
 })
 export class MainPage implements AfterViewInit {
 
   protected version = version;
-  protected isMultiselect = signal(false);
+  protected listStore = inject(RecordingListStore);
+  protected isMultiselect = this.listStore.isMultiselect;
   protected isSearch = signal(false);
-  protected searchValue = signal('');
+  protected searchValue = this.listStore.searchValue;
+  protected directionFilter = this.listStore.directionFilter;
+  protected directionFilters: { value: DirectionFilter; label: string }[] = [
+    { value: 'all', label: 'All' },
+    { value: 'in', label: 'Incoming' },
+    { value: 'out', label: 'Outgoing' },
+    { value: 'unknown', label: 'Other' },
+  ];
   actionButtons: ActionButton[] = [
     {
       icon: () => this.searchValue() ? 'search-circle' : 'search-circle-outline',
@@ -88,21 +98,8 @@ export class MainPage implements AfterViewInit {
   // show a progress for long actions
   protected progressMessage = signal<string|undefined>(undefined);
 
-  // filtered items collection
-  protected items = computed<Recording[]>(() => {
-    // filter & sort
-    let filteredItems = filterList(this.recordingsService.recordings(), this.searchValue(), r => `${r.opName} ${r.opNumber}`);
-    filteredItems = sortRecordings(filteredItems, this.settings.recordingsSortMode);
-    // reset selection if item is now missing
-    untracked(() => {
-      const selItem = this.selectedItem();
-      if (selItem && !filteredItems.includes(selItem)) {
-        this.clearSelection();
-      }
-    });
-    // return sorted
-    return filteredItems;
-  });
+  // Filtering and batch selection are managed independently of playback.
+  protected items = this.listStore.items;
 
   protected topIndex = 0; // index of top shown recording
   protected itemHeight = 78;
@@ -155,7 +152,7 @@ export class MainPage implements AfterViewInit {
     await untilTrue(() => this.recordingsService.refreshProgress() === undefined);
 
     this.clearFilter();
-    this.isMultiselect.set(false);
+    this.listStore.clearSelection();
 
     // find the required filename
     const playItemIx = this.items().findIndex(i => i.audioUri === viewIntentFilename);
@@ -167,16 +164,15 @@ export class MainPage implements AfterViewInit {
       this.scrollViewport()?.scrollToIndex(playItemIx);
 
       // select & play it (need to wait for player initialization)
-      playItem.selected = true;
       this.selectedItem.set(playItem);
-      this.cdr.detectChanges(); // forcibly detect the .selected change above
+      this.cdr.detectChanges();
       await untilTrue(() => this.player()?.recording() === playItem && this.player()!.isReady());
       this.player()?.play();
 
     }
     else if (!forceListRefresh) {
       // retry forcing list refresh
-      this.playIntentFile(viewIntentFilename, true);
+      await this.playIntentFile(viewIntentFilename, true);
     }
     else {
       // error
@@ -206,20 +202,30 @@ export class MainPage implements AfterViewInit {
     await this.recordingsService.initialize();
   }
 
-  refreshList(event?: RefresherCustomEvent) {
-    event?.target.complete();
+  async refreshList(event?: RefresherCustomEvent) {
     this.clearSelection();
-    return this.recordingsService.refreshContent();
+    try {
+      await this.recordingsService.refreshContent();
+    } finally {
+      await event?.target.complete();
+    }
   }
 
   clearSelection() {
-    this.recordingsService.recordings().forEach(r => r.selected = false); // remove flag from itemsAll, just to stay safe...😉
-    this.selectedItem.set(undefined);
-    this.isMultiselect.set(false);
+    this.listStore.clearSelection();
   }
 
   getSelectedItems(): Recording[] {
-    return this.items().filter(r => r.selected);
+    return this.listStore.getSelectedItems();
+  }
+
+  protected isSelected(item: Recording) {
+    return this.listStore.isSelected(item);
+  }
+
+  protected setDirectionFilter(value: DirectionFilter) {
+    this.directionFilter.set(value);
+    this.scrollViewport()?.scrollToIndex(0);
   }
 
   /**
@@ -233,7 +239,7 @@ export class MainPage implements AfterViewInit {
   }
 
   clearFilter() {
-    this.searchValue.set('');
+    this.listStore.clearFilter();
     this.isSearch.set(false);
     // this.updateFilter();
   }
@@ -242,27 +248,40 @@ export class MainPage implements AfterViewInit {
    * Change selected status
    */
   async onItemClick(item: Recording) {
-
-    if (item.selected) {
-      this.selectedItem.set(undefined);
-      // if (this.isMultiselect()) {
-        item.selected = false;
-      // disable multiselection if no element is still selected
-      if (this.isMultiselect() && !this.getSelectedItems().length) {
-        this.isMultiselect.set(false);
-      }
+    if (this.isMultiselect()) {
+      this.listStore.toggle(item);
+      return;
     }
-    else {
-      if (!this.isMultiselect()) {
-        this.clearSelection();
-      }
-      item.selected = true;
-      this.selectedItem.set(item);
-      if (!this.isMultiselect()) {
-        bringIntoView('.items .selected');
-      }
-    }
+    this.selectedItem.set(item);
+  }
 
+  /** Play button changes the active audio without entering batch selection. */
+  async playRecording(item: Recording, event?: Event) {
+    event?.stopPropagation();
+    if (this.isMultiselect()) {
+      this.listStore.toggle(item);
+      return;
+    }
+    this.selectedItem.set(item);
+    this.cdr.detectChanges();
+    await untilTrue(() => this.player()?.recording() === item && !!this.player()?.isReady(), 100, 10000);
+    if (this.selectedItem() === item) await this.player()?.play();
+  }
+
+  /** Single contextual action sheet, rather than actions spread through the row. */
+  async showRecordingActions(item: Recording, event?: Event) {
+    event?.stopPropagation();
+    const sheet = await this.asc.create({
+      header: item.opName,
+      buttons: [
+        { text: this.i18n.get('HOME_EDIT_TITLE'), icon: 'pencil', handler: () => { void this.editItem(item); } },
+        { text: this.i18n.get('HOME_EDIT_COPYNUMBER'), icon: 'copy-outline', handler: () => { void Clipboard.write({ string: item.opNumber }); } },
+        { text: 'Share', icon: 'share-social', handler: () => { void this.shareRecording(item); } },
+        { text: this.i18n.get('LBL_DELETE'), icon: 'trash', role: 'destructive', handler: () => { void this.deleteItems([item]); } },
+        { text: 'Cancel', icon: 'close', role: 'cancel' },
+      ],
+    });
+    await sheet.present();
   }
 
   /**
@@ -430,14 +449,13 @@ export class MainPage implements AfterViewInit {
    * Select all items
    */
   async selectAll() {
-    this.isMultiselect.set(true);
-    this.items().forEach(i => i.selected = true); // select all VISIBLE items
+    this.listStore.selectAll();
   }
 
   /**
    * Show Android share dialog to share an audio file
    */
-  async shareRecording(item: Recording, event: MouseEvent) {
+  async shareRecording(item: Recording, event?: Event) {
 
     // stop player
     await this.stopPlayer();
@@ -476,13 +494,7 @@ Duration: ${toHms(item.duration)}
    * Start multiselection and select the given item
    */
   protected startMultiselection(item?: Recording) {
-    if (!this.isMultiselect()) {
-      this.clearSelection();
-      this.isMultiselect.set(true);
-      if (item) {
-        item.selected = true;
-      }
-    }
+    this.listStore.startMultiselection(item);
   }
 
   /**
@@ -504,11 +516,11 @@ Duration: ${toHms(item.duration)}
    */
   protected onSkip(direction: SkipDirection) {
     // find first selected item index
-    const selectedItemIndex = this.items().findIndex(i => i.selected);
+    const selectedItemIndex = this.items().findIndex(i => i.audioUri === this.selectedItem()?.audioUri);
     if (selectedItemIndex >= 0) {
       const newSelectedItem = this.items()[selectedItemIndex + (direction === 'next' ? +1 : -1)];
       if (newSelectedItem) {
-        this.onItemClick(newSelectedItem);
+        void this.playRecording(newSelectedItem);
       }
     }
   }
