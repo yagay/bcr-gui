@@ -98,15 +98,9 @@
     }
 
     &.selected {
-      height: unset;
       border: 2px solid var(--item-border-color-selected);
       background-color: var(--ion-item-background-selected);
-      box-shadow: 0px 0px 4px 1px var(--item-border-color-selected);
-      border-radius: 10px;
-
-      .op-name {
-        -webkit-line-clamp: 4;
-      }
+      box-shadow: none;
     }
 
     .checkbox {
@@ -134,13 +128,7 @@
 }
 
 // revert some customizations in multiline mode
-.multiselect .item.selected {
-  height: var(--item-height);
-  .op-name {
-    -webkit-line-clamp: 1;
-    line-clamp: 1;
-  }
-}
+.multiselect .item.selected { min-height: var(--item-height); }
 
 .progress-overlay {
   --background: var(--ion-color-step-100, #ffffff);
@@ -152,3 +140,49 @@
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
   }
 }
+
+/* Recording rows stay at the virtual viewport's fixed item size. The player
+   lives outside the viewport so expanding it cannot corrupt scroll offsets. */
+.virtual-scroll-viewport .item {
+  height: var(--item-height);
+  min-height: var(--item-height);
+  max-height: var(--item-height);
+  box-sizing: border-box;
+  overflow: hidden;
+  box-shadow: none;
+  border: 1px solid var(--ion-color-step-150);
+  border-radius: 8px;
+}
+.virtual-scroll-viewport .item ion-card-header { padding: 12px 14px; }
+.recording-player-footer {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--player-background-color);
+}
+.selected-recording-details {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 8px 12px 0;
+  border-top: 1px solid var(--ion-color-step-150);
+}
+.selected-recording-name {
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.selected-recording-meta {
+  grid-column: 1;
+  font-size: 0.78rem;
+  color: var(--ion-color-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.selected-recording-actions {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+}
+.selected-recording-actions ion-button { margin: 0; --padding-start: 7px; --padding-end: 7px; }
