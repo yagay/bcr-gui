@@ -38,9 +38,11 @@ jobs:
         run: npm ci
 
       - name: Make legacy Capacitor 6 compatible with modern Android Gradle Plugin
-        # Only patch the downloaded dependency during CI; original source stays unchanged.
+        # Only patch installed dependencies, exactly as the BCR Suite Debug CI does.
+        # None of the original source files or tracked Gradle files are modified.
         run: |
-          sed -i "s/proguard-android\\.txt/proguard-android-optimize.txt/g" node_modules/@capacitor/android/capacitor/build.gradle
+          find node_modules -type f -name build.gradle -print0 |
+            xargs -0 -r sed -i 's/proguard-android[.]txt/proguard-android-optimize.txt/g'
 
       - name: Build original Angular UI
         run: npm run build
