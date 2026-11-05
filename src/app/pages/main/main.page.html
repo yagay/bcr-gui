@@ -102,47 +102,6 @@
               </ion-card-subtitle>
             </ion-card-header>
 
-            @if (!isMultiselect() && item.selected) {
-              <ion-card-content class="content">
-
-                <div class="details-actions">
-
-                  <!-- details -->
-                  <div class="details">
-                    @if (item.opName !== item.opNumber) {
-                      <p>{{ 'HOME_REC_PHONE_NUMBER' | translatePipe}}: {{ item.opNumber }}</p>
-                    }
-                    <p>{{ 'HOME_REC_TYPE' | translatePipe}}: {{ item.mimeType }}</p>
-                    <p>{{ 'HOME_REC_SIZE' | translatePipe}}: {{ item.filesize | filesize }}</p>
-                  </div>
-
-                  <!-- action buttons -->
-                  <div class="actions">
-
-                    <!-- edit -->
-                    <ion-icon name="pencil"
-                      class="action"
-                      (click)="editItem(item)"
-                    />
-
-                    <!-- share -->
-                    <ion-icon name="share-social"
-                      class="action"
-                      (click)="shareRecording(item, $event)"
-                    />
-
-                    <!-- delete -->
-                    <ion-icon name="trash"
-                      class="action"
-                      (click)="deleteItems([item])"
-                    />
-
-                  </div>
-
-                </div>
-
-              </ion-card-content>
-            }
 
           </div>
 
@@ -173,7 +132,16 @@
 
 <!-- audio player -->
 @if (selectedItem() && !isMultiselect()) {
-  <ion-footer>
+  <ion-footer class="recording-player-footer">
+    <div class="selected-recording-details">
+      <div class="selected-recording-name">{{ selectedItem()!.opName }}</div>
+      <div class="selected-recording-meta">{{ selectedItem()!.date | datetime }} · {{ selectedItem()!.opNumber }}</div>
+      <div class="selected-recording-actions">
+        <ion-button fill="clear" (click)="editItem(selectedItem()!)" aria-label="Edit"><ion-icon slot="icon-only" name="pencil" /></ion-button>
+        <ion-button fill="clear" (click)="shareRecording(selectedItem()!, $any($event))" aria-label="Share"><ion-icon slot="icon-only" name="share-social" /></ion-button>
+        <ion-button fill="clear" (click)="deleteItems([selectedItem()!])" aria-label="Delete"><ion-icon slot="icon-only" name="trash" /></ion-button>
+      </div>
+    </div>
     <app-audio-player #audioPlayer class="player"
       [recording]="selectedItem()!"
       (onSkip)="onSkip($event)"
