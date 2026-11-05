@@ -92,30 +92,20 @@
   .call-row { transition: none; }
 }
 
-/* Keep the initial flat call-log style; expose the actual indexed/file counts. */
+/* Readable totals without changing the original flat-history layout. */
 .history-counts {
   display:flex;
-  align-items:center;
   flex-wrap:wrap;
-  gap:5px 12px;
-  padding:5px 12px;
-  border-bottom:1px solid var(--ion-color-step-150);
-  background:var(--ion-background-color);
-  color:var(--ion-color-step-600);
+  gap:6px 12px;
+  padding:4px 12px;
   font-size:11px;
+  border-bottom:1px solid var(--ion-color-step-150);
 }
 .history-view-button {
   margin-left:auto;
-  padding:5px 9px;
   border:1px solid var(--ion-color-step-250);
   border-radius:8px;
-  color:var(--ion-color-primary);
   background:transparent;
-  font-size:12px;
-  min-height:32px;
+  color:var(--ion-color-primary);
 }
-.scan-warning {
-  flex:1 0 100%;
-  color:var(--ion-color-warning-shade,var(--ion-color-danger));
-  font-size:11px;
-}
+.scan-warning {width:100%;color:var(--ion-color-danger);}
