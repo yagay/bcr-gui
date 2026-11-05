@@ -1,5 +1,5 @@
 import { AudioPlayerComponent, SkipDirection } from 'src/app/components/audio-player/audio-player.component';
-import { HeaderComponent } from 'src/app/components/header/header.component';
+import { ActionButton, HeaderComponent } from 'src/app/components/header/header.component';
 import { VirtualScrollbarComponent } from 'src/app/components/virtual-scrollbar/virtual-scrollbar.component';
 import { RecordingGroupsService } from 'src/app/features/recording-groups/recording-groups.service';
 import { HistoryRecordingRowComponent } from 'src/app/features/recording-groups/history-recording-row.component';
@@ -62,7 +62,6 @@ export class MainPage implements AfterViewInit, OnDestroy {
   protected version = version;
   protected isMultiselect = signal(false);
   protected searchValue = signal('');
-  protected isZh = /^zh\b/i.test(navigator.language);
   protected showAllRecordings = signal(false);
   protected directionFilter = signal<HistoryFilter>('all');
   private playRequestId = 0;
@@ -71,7 +70,12 @@ export class MainPage implements AfterViewInit, OnDestroy {
   private viewportScrollFrame = 0;
   private scrollOffsetPx = signal(0);
   private viewportHeightPx = signal(0);
-  // Search and filters are controlled by the same HistoryControls toolbar.
+  // Restore the original header search affordance while keeping new filters below.
+  protected actionButtons: ActionButton[] = [{
+    icon: () => this.searchValue() ? 'search-circle' : 'search-circle-outline',
+    visible: () => !this.isMultiselect(),
+    onClick: () => this.historyControls()?.toggleSearch(),
+  }];
   selectedItem = signal<Recording | undefined>(undefined);
   protected recordingGroups = inject(RecordingGroupsService);
   protected expandedGroupKey = this.recordingGroups.expandedGroupKey;
@@ -313,7 +317,19 @@ export class MainPage implements AfterViewInit, OnDestroy {
       return;
     }
     if (!this.showAllRecordings() && this.isGroupHeader(item) && this.getGroupCount(item) > 1) {
-      this.toggleGroup(item);
+      // Original contact-row behavior: expand and select the latest file.
+      // Its chevron remains expand-only and its play button remains play-only.
+      const same = this.selectedItem()?.audioUri === item.audioUri;
+      const expanded = this.expandedGroupKey() === this.getGroupKey(item);
+      if (same && expanded) {
+        this.recordingGroups.toggle(item, this.settings.defaultCountryPrefix);
+        this.clearSelection();
+      } else {
+        ++this.playRequestId;
+        this.selectRecording(item);
+        this.cdr.detectChanges();
+        this.remeasureViewport();
+      }
       return;
     }
     if (this.selectedItem() === item) {
@@ -333,13 +349,14 @@ export class MainPage implements AfterViewInit, OnDestroy {
 
   private player = viewChild(AudioPlayerComponent);
   private scrollViewport = viewChild(CdkVirtualScrollViewport);
+  private historyControls = viewChild(HistoryControlsComponent);
 
   constructor(
     private asc: ActionSheetController,
     private cdr: ChangeDetectorRef,
     private contactsService: ContactsService,
     private datePipe: DatePipe,
-    private i18n: I18nService,
+    protected i18n: I18nService,
     private mbs: MessageBoxService,
     private toHms: ToHmsPipe,
     protected recordingsService: RecordingsService,
@@ -761,7 +778,9 @@ Duration: ${this.toHms.transform(item.duration)}
     if (this.isMultiselect()) return;
     this.clearSelection();
     this.isMultiselect.set(true);
-    this.selectedUris.set(new Set(item ? this.groupActionRecords(item).map(r => r.audioUri) : []));
+    // Original long-press starts with the touched recording only; tapping
+    // a group header while in multi-select can still select its whole group.
+    this.selectedUris.set(new Set(item ? [item.audioUri] : []));
     this.cdr.markForCheck();
   }
 

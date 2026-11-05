@@ -1,27 +1,27 @@
-<app-header [title]="version.appName" [showCustomContent]="isMultiselect()">
+<app-header [title]="version.appName" [actionButtons]="actionButtons" [showCustomContent]="isMultiselect()">
   <ion-buttons slot="start">
-    <ion-button (click)="clearSelection()" aria-label="Cancel selection">
+    <ion-button (click)="clearSelection()" [attr.aria-label]="i18n.get('HISTORY_CANCEL_SELECTION')">
       <ion-icon name="close" slot="icon-only" />
     </ion-button>
   </ion-buttons>
   <ion-buttons slot="end">
-    <ion-label>{{ selectedCount() }} {{ isZh ? '条已选' : 'selected' }}</ion-label>
-    <ion-button (click)="deselectAll()" [disabled]="selectedCount() === 0" aria-label="Deselect all">
+    <ion-label>{{ i18n.get('HISTORY_SELECTED', selectedCount()) }}</ion-label>
+    <ion-button (click)="deselectAll()" [disabled]="selectedCount() === 0" [attr.aria-label]="i18n.get('HISTORY_DESELECT_ALL')">
       <ion-icon name="remove-circle-outline" slot="icon-only" />
     </ion-button>
-    <ion-button (click)="invertSelection()" aria-label="Invert selected recordings">
+    <ion-button (click)="invertSelection()" [attr.aria-label]="i18n.get('HISTORY_INVERT_SELECTION')">
       <ion-icon name="swap-horizontal-outline" slot="icon-only" />
     </ion-button>
-    <ion-button (click)="selectAll()" aria-label="Select all recordings">
+    <ion-button (click)="selectAll()" [attr.aria-label]="i18n.get('LBL_SELECTALL')">
       <ion-icon src="/assets/icons/select-all.svg" slot="icon-only" />
     </ion-button>
-    <ion-button (click)="deleteItems(getSelectedItems())" [disabled]="selectedCount() === 0" aria-label="Delete selected recordings">
+    <ion-button (click)="deleteItems(getSelectedItems())" [disabled]="selectedCount() === 0" [attr.aria-label]="i18n.get('HISTORY_DELETE_SELECTED')">
       <ion-icon name="trash" slot="icon-only" />
     </ion-button>
   </ion-buttons>
 </app-header>
 
-<app-history-controls [zh]="isZh" [search]="searchValue()" [direction]="directionFilter()" [total]="indexedCount()"
+<app-history-controls [search]="searchValue()" [direction]="directionFilter()" [total]="indexedCount()"
   [contactCount]="groupCount()" [matches]="historyIntegrity().sourceCount"
   [hasFilter]="!!searchValue() || directionFilter() !== 'all'"
   [allRecordings]="showAllRecordings()" [refreshing]="isRefreshing()" [sortMode]="sortMode()"
@@ -30,11 +30,14 @@
   (refresh)="refreshFromToolbar()" />
 
 <ion-content id="main-content" class="main-content" [scrollY]="false">
+  <ion-refresher slot="fixed" [disabled]="topIndex > 0 || isRefreshing()"
+    pullFactor=".5" pullMin="60" pullMax="120" (ionRefresh)="refreshList($any($event))">
+    <ion-refresher-content pullingIcon="refresh"
+      [pullingText]="i18n.get('HOME_PULL_TO_REFRESH')"
+      refreshingSpinner="circles" [refreshingText]="i18n.get('HOME_REFRESHING')" />
+  </ion-refresher>
   <div class="history-layout">
-    <section class="history-list-area" [attr.aria-label]="isZh ? '录音历史' : 'Recording history'">
-      <ion-refresher slot="fixed" [disabled]="topIndex > 0" (ionRefresh)="refreshList($any($event))">
-        <ion-refresher-content refreshingSpinner="circles" />
-      </ion-refresher>
+    <section class="history-list-area" [attr.aria-label]="i18n.get('HISTORY_RECORDINGS')">
       <cdk-virtual-scroll-viewport #vsv class="virtual-scroll-viewport ion-content-scroll-host"
         [itemSize]="itemHeight" [minBufferPx]="480" [maxBufferPx]="960"
         (scrolledIndexChange)="onScroll($event)" (scroll)="onViewportScroll()">
@@ -47,13 +50,13 @@
               [expanded]="expandedGroupKey() === getGroupKey(entry.recording)"
               [selected]="rowSelected(entry.recording)" [partial]="rowPartSelected(entry.recording)"
               [playing]="isRowPlaying(entry.recording)"
-              [multiselect]="isMultiselect()" [zh]="isZh" [hour12]="settings.is12Hours"
+              [multiselect]="isMultiselect()"
               (opened)="onRowClick(entry.recording)" (playClicked)="onPlayRow(entry.recording)"
               (expandedClicked)="toggleGroup(entry.recording)"
               (longPressed)="startMultiselection(entry.recording)" />
           } @else {
             <app-history-inline-player
-              [zh]="isZh" [position]="inlineProgress()" [duration]="inlineDuration()"
+              [position]="inlineProgress()" [duration]="inlineDuration()"
               [playing]="inlinePlaying()" [ready]="inlineReady()" [failed]="inlineFailed()"
               [speed]="playbackSpeed()" [seekSeconds]="settings.seekTime"
               [canPrevious]="canSkip('prev')" [canNext]="canSkip('next')"
@@ -69,29 +72,29 @@
       @if (items().length === 0) {
         <div class="history-empty" role="status" aria-live="polite">
           @if (initializing() || isRefreshing()) {
-            <strong>{{ isZh ? '正在读取录音…' : 'Loading recordings…' }}</strong>
-            <span>{{ isZh ? '正在建立录音列表' : 'Indexing recording files' }}</span>
+            <strong>{{ i18n.get('HISTORY_LOADING') }}</strong>
+            <span>{{ i18n.get('HISTORY_INDEXING') }}</span>
           } @else if (recordingsService.lastRefreshError()) {
-            <strong>{{ isZh ? '读取录音时发生错误' : 'Could not load recordings' }}</strong>
+            <strong>{{ i18n.get('HISTORY_LOAD_ERROR') }}</strong>
             <span>{{ recordingsService.lastRefreshError() }}</span>
-            <button type="button" (click)="refreshFromToolbar()">{{ isZh ? '重试' : 'Retry' }}</button>
+            <button type="button" (click)="refreshFromToolbar()">{{ i18n.get('HISTORY_RETRY') }}</button>
           } @else if (!settings.recordingsDirectoryUri) {
-            <strong>{{ isZh ? '尚未选择录音目录' : 'Recording directory not selected' }}</strong>
-            <span>{{ isZh ? '请选择或刷新录音目录' : 'Choose or refresh the recording directory' }}</span>
+            <strong>{{ i18n.get('HISTORY_NO_DIRECTORY') }}</strong>
+            <span>{{ i18n.get('HISTORY_NO_DIRECTORY_HELP') }}</span>
           } @else if (indexedCount() === 0) {
-            <strong>{{ isZh ? '没有录音文件' : 'No recordings yet' }}</strong>
-            <span>{{ isZh ? '新录音会在扫描后出现在这里' : 'Your recordings will appear here after a scan' }}</span>
+            <strong>{{ i18n.get('HISTORY_NO_RECORDINGS') }}</strong>
+            <span>{{ i18n.get('HISTORY_NO_RECORDINGS_HELP') }}</span>
           } @else {
-            <strong>{{ isZh ? '没有匹配的录音' : 'No matching recordings' }}</strong>
-            <span>{{ isZh ? '调整搜索内容或通话类型筛选' : 'Try different search or call filters' }}</span>
-            <button type="button" (click)="resetFilters()">{{ isZh ? '清除筛选' : 'Clear filters' }}</button>
+            <strong>{{ i18n.get('HISTORY_NO_MATCHES') }}</strong>
+            <span>{{ i18n.get('HISTORY_NO_MATCHES_HELP') }}</span>
+            <button type="button" (click)="resetFilters()">{{ i18n.get('HISTORY_CLEAR_FILTERS') }}</button>
           }
         </div>
       }
       @if (items().length > 0 && recordingsService.lastRefreshError() && !isRefreshing()) {
         <div class="history-scan-warning" role="status">
-          {{ isZh ? '最近一次扫描失败，当前显示已有录音' : 'Last scan failed; showing existing recordings' }}
-          <button type="button" (click)="refreshFromToolbar()">{{ isZh ? '重试' : 'Retry' }}</button>
+          {{ i18n.get('HISTORY_SCAN_FAILED') }}
+          <button type="button" (click)="refreshFromToolbar()">{{ i18n.get('HISTORY_RETRY') }}</button>
         </div>
       }
     </section>
@@ -99,7 +102,7 @@
     @if (selectedItem() && !isMultiselect() && !inlinePlayerVisible()) {
       <div class="collapsed-player-dock">
         <app-history-inline-player
-          [zh]="isZh" [position]="inlineProgress()" [duration]="inlineDuration()"
+          [position]="inlineProgress()" [duration]="inlineDuration()"
           [playing]="inlinePlaying()" [ready]="inlineReady()" [failed]="inlineFailed()"
           [speed]="playbackSpeed()" [seekSeconds]="settings.seekTime"
           [canPrevious]="canSkip('prev')" [canNext]="canSkip('next')"
@@ -112,7 +115,7 @@
     }
 
     @if (selectedItem() && !isMultiselect()) {
-      <app-history-details [recording]="selectedItem()!" [zh]="isZh"
+      <app-history-details [recording]="selectedItem()!"
         [dialUri]="isDialableNumber(selectedItem()!) ? getDialUri(selectedItem()!) : null"
         (close)="clearSelection()" (edit)="editItem(selectedItem()!)"
         (share)="shareRecording(selectedItem()!)" (delete)="deleteItems([selectedItem()!])" />
