@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, ElementRef, inject, input, OnDestroy, output, signal, viewChild } from '@angular/core';
-import { I18nService } from 'src/app/services/i18n.service';
+import { I18nKey, I18nService } from 'src/app/services/i18n.service';
 import { SortModeEnum } from 'src/app/utils/recordings-sorter';
 
 export type HistoryDirection = 'all' | 'in' | 'out' | 'voip';
@@ -138,7 +138,7 @@ export class HistoryControlsComponent implements OnDestroy {
   ngOnDestroy(): void {
     if (this.searchDebounce) clearTimeout(this.searchDebounce);
   }
-  protected readonly sortOptions = [
+  protected readonly sortOptions: {value: SortModeEnum; label: I18nKey}[] = [
     {value: SortModeEnum.Date_DESC, label: 'SETTINGS_RECORDINGS_SORT_DATE_DESC'},
     {value: SortModeEnum.Date_ASC, label: 'SETTINGS_RECORDINGS_SORT_DATE_ASC'},
     {value: SortModeEnum.Duration_DESC, label: 'SETTINGS_RECORDINGS_SORT_DURATION_DESC'},
@@ -150,7 +150,7 @@ export class HistoryControlsComponent implements OnDestroy {
       this.sortChange.emit(selected as SortModeEnum);
     }
   }
-  protected readonly directions: {key: HistoryDirection;label: string}[] = [
+  protected readonly directions: {key: HistoryDirection;label: I18nKey}[] = [
     {key:'all',label:'HISTORY_ALL'},
     {key:'in',label:'HISTORY_INCOMING'},
     {key:'out',label:'HISTORY_OUTGOING'},

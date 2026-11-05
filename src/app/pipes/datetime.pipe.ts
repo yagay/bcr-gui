@@ -17,17 +17,20 @@ export class DatetimePipe implements PipeTransform {
     if (timestamp === null || timestamp === undefined) return '';
 
     // merge 12/24 time setting (could be forced in Android settings...)
-    options = { ...(options ?? this.settings.dateTimeFormat), hour12: this.settings.is12Hours };
+    const format: AppDateTimeFormat & Intl.DateTimeFormatOptions = {
+      ...(options ?? this.settings.dateTimeFormat),
+      hour12: this.settings.is12Hours,
+    };
 
     // manage 'custom' format
-    if (options.customFormat) {
-      return DatetimePipe.toCustomFormat(timestamp, options.customFormat);
+    if (format.customFormat) {
+      return DatetimePipe.toCustomFormat(timestamp, format.customFormat);
     }
     else {
       // format date
       const dtf = Intl.DateTimeFormat(
-        options.culture || this.settings.culture || undefined, // configured language, otherwise system
-        options as Intl.DateTimeFormatOptions
+        format.culture || this.settings.culture || undefined, // configured language, otherwise system
+        format
       );
       return dtf.format(timestamp);
     }

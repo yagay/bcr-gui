@@ -36,7 +36,7 @@ import { FilesizePipe } from 'src/app/pipes/filesize.pipe';
       <div class="actions">
         @if (dialUri()) {
           <a [href]="dialUri()" class="action" [attr.aria-label]="i18n.get('HISTORY_CALL')">
-            <ion-icon name="call-outline" />{{ zh() ? '拨号' : 'Call' }}
+            <ion-icon name="call-outline" />{{ i18n.get('HISTORY_CALL') }}
           </a>
         }
         <button type="button" class="action" (click)="edit.emit()">
