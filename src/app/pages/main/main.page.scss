@@ -55,4 +55,23 @@
   justify-content:space-between;gap:8px;padding:8px 12px;border-radius:9px;background:var(--ion-color-step-100);
   border:1px solid var(--ion-color-step-250);font-size:12px;z-index:2;}
 .player-engine {position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;}
-.collapsed-player-dock {flex:0 0 78px;min-height:78px;border-top:1px solid var(--ion-color-step-200);}
+.collapsed-player-dock {flex:0 0 90px;min-height:90px;border-top:1px solid var(--ion-color-step-200);}
+
+/* Original card rhythm without forcing a variable DOM height into fixed CDK. */
+.virtual-scroll-viewport ::ng-deep .cdk-virtual-scroll-content-wrapper {
+  box-sizing:border-box;
+  padding:0 0 8px;
+}
+.inline-history-detail,.inline-history-player {
+  display:block;
+  box-sizing:border-box;
+  width:100%;
+  min-width:0;
+}
+.selection-count {
+  max-width:min(34vw,150px);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:12px;
+}

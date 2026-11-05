@@ -5,19 +5,31 @@
     </ion-button>
   </ion-buttons>
   <ion-buttons slot="end">
-    <ion-label>{{ i18n.get('HISTORY_SELECTED', selectedCount()) }}</ion-label>
-    <ion-button (click)="deselectAll()" [disabled]="selectedCount() === 0" [attr.aria-label]="i18n.get('HISTORY_DESELECT_ALL')">
-      <ion-icon name="remove-circle-outline" slot="icon-only" />
-    </ion-button>
-    <ion-button (click)="invertSelection()" [attr.aria-label]="i18n.get('HISTORY_INVERT_SELECTION')">
-      <ion-icon name="swap-horizontal-outline" slot="icon-only" />
-    </ion-button>
+    <ion-label class="selection-count">{{ i18n.get('HISTORY_SELECTED', selectedCount()) }}</ion-label>
     <ion-button (click)="selectAll()" [attr.aria-label]="i18n.get('LBL_SELECTALL')">
       <ion-icon src="/assets/icons/select-all.svg" slot="icon-only" />
     </ion-button>
-    <ion-button (click)="deleteItems(getSelectedItems())" [disabled]="selectedCount() === 0" [attr.aria-label]="i18n.get('HISTORY_DELETE_SELECTED')">
+    <ion-button (click)="deleteItems(getSelectedItems())" [disabled]="selectedCount() === 0"
+      [attr.aria-label]="i18n.get('HISTORY_DELETE_SELECTED')">
       <ion-icon name="trash" slot="icon-only" />
     </ion-button>
+    <ion-button id="history-selection-more" [attr.aria-label]="i18n.get('LBL_MORE')">
+      <ion-icon name="ellipsis-vertical" slot="icon-only" />
+    </ion-button>
+    <ion-popover trigger="history-selection-more" [dismissOnSelect]="true">
+      <ng-template>
+        <ion-list lines="none">
+          <ion-item button (click)="invertSelection()">
+            <ion-icon name="swap-horizontal-outline" slot="start" />
+            <ion-label>{{ i18n.get('HISTORY_INVERT_SELECTION') }}</ion-label>
+          </ion-item>
+          <ion-item button (click)="deselectAll()" [disabled]="selectedCount() === 0">
+            <ion-icon name="remove-circle-outline" slot="start" />
+            <ion-label>{{ i18n.get('HISTORY_DESELECT_ALL') }}</ion-label>
+          </ion-item>
+        </ion-list>
+      </ng-template>
+    </ion-popover>
   </ion-buttons>
 </app-header>
 
@@ -39,13 +51,14 @@
   <div class="history-layout">
     <section class="history-list-area" [attr.aria-label]="i18n.get('HISTORY_RECORDINGS')">
       <cdk-virtual-scroll-viewport #vsv class="virtual-scroll-viewport ion-content-scroll-host"
-        [itemSize]="itemHeight" [minBufferPx]="480" [maxBufferPx]="960"
+        [historyVariableScroll]="displayRows()"
         (scrolledIndexChange)="onScroll($event)" (scroll)="onViewportScroll()">
         <ng-container *cdkVirtualFor="let entry of displayRows(); trackBy: trackByDisplayRow">
           @if (entry.kind === 'recording') {
             <app-history-recording-row
+              [style.height.px]="entry.height"
               [recording]="entry.recording"
-              [isHeader]="showAllRecordings() || isGroupHeader(entry.recording)"
+              [isHeader]="!entry.isChild"
               [groupCount]="showAllRecordings() ? 1 : getGroupCount(entry.recording)"
               [expanded]="expandedGroupKey() === getGroupKey(entry.recording)"
               [selected]="rowSelected(entry.recording)" [partial]="rowPartSelected(entry.recording)"
@@ -56,8 +69,14 @@
               (expandedClicked)="toggleGroup(entry.recording)"
               (groupSelectClicked)="toggleGroupSelection(entry.recording)"
               (longPressed)="startMultiselection(entry.recording)" />
+          } @else if (entry.kind === 'detail') {
+            <app-history-details class="inline-history-detail" [style.height.px]="entry.height"
+              [recording]="entry.recording"
+              [dialUri]="isDialableNumber(entry.recording) ? getDialUri(entry.recording) : null"
+              (close)="clearSelection()" (edit)="editItem(entry.recording)"
+              (share)="shareRecording(entry.recording)" (delete)="deleteItems([entry.recording])" />
           } @else {
-            <app-history-inline-player
+            <app-history-inline-player class="inline-history-player" [style.height.px]="entry.height"
               [position]="inlineProgress()" [duration]="inlineDuration()"
               [playing]="inlinePlaying()" [ready]="inlineReady()" [failed]="inlineFailed()"
               [speed]="playbackSpeed()" [seekSeconds]="settings.seekTime"
@@ -117,11 +136,7 @@
     }
 
     @if (selectedItem() && !isMultiselect()) {
-      <app-history-details [recording]="selectedItem()!"
-        [dialUri]="isDialableNumber(selectedItem()!) ? getDialUri(selectedItem()!) : null"
-        (close)="clearSelection()" (edit)="editItem(selectedItem()!)"
-        (share)="shareRecording(selectedItem()!)" (delete)="deleteItems([selectedItem()!])" />
-      <!-- One player, outside CDK. Selecting or scrolling never remounts another. -->
+      <!-- The only native audio engine is persistent, never in a virtual row. -->
       <app-audio-player #audioPlayer class="player-engine" [recording]="selectedItem()!"
         (onSkip)="onSkip($event)" />
     }

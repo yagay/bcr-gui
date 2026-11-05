@@ -18,7 +18,8 @@ import { RecordingsService } from 'src/app/services/recordings.service';
 import { SettingsService } from 'src/app/services/settings.service';
 import { buildRecordingHistory, projectRecordingHistory, historyConsistency, filterRecordingDirection, HistoryFilter } from 'src/app/features/recording-groups/recording-history.model';
 import { SortModeEnum } from 'src/app/utils/recordings-sorter';
-import { buildDisplayRows, HistoryDisplayRow, actionRecords, selectionState, setGroupSelection, invertRecordingSelection, inlineRowOnScreen } from 'src/app/features/recording-groups/history-display-rows';
+import { buildDisplayRows, HistoryDisplayRow, actionRecords, selectionState, setGroupSelection, invertRecordingSelection, inlineRowOnScreen, HISTORY_ROW_HEIGHT } from 'src/app/features/recording-groups/history-display-rows';
+import { HistoryVariableScrollDirective } from 'src/app/features/recording-groups/history-variable-scroll.directive';
 import { untilTrue } from 'src/app/utils/waitForAsync';
 import { AndroidSAF } from 'src/plugins/androidsaf';
 import { ErrorCode } from 'src/plugins/bcrgui';
@@ -46,6 +47,7 @@ import version from '../../version';
     HistoryControlsComponent,
     HistoryDetailsComponent,
     HistoryInlinePlayerComponent,
+    HistoryVariableScrollDirective,
     ScrollingModule,
     ToHmsPipe,
     VirtualScrollbarComponent,
@@ -111,6 +113,14 @@ export class MainPage implements AfterViewInit, OnDestroy {
   protected displayRows = computed(() => buildDisplayRows(
     this.items(),
     this.isMultiselect() ? undefined : this.selectedItem()?.audioUri,
+    {
+      // Preserve the original contact/child hierarchy while CDK receives
+      // exact measured heights for each row. No overflow or spacer overlay.
+      isChild: item => !this.showAllRecordings() && !this.isGroupHeader(item),
+      showDetails: !this.isMultiselect(),
+      detailHeight: HISTORY_ROW_HEIGHT.detail,
+      playerHeight: HISTORY_ROW_HEIGHT.player,
+    },
   ));
   protected displayCount = computed(() => this.displayRows().length);
   protected indexedCount = computed(() => this.recordingsService.recordings().length);
@@ -176,7 +186,7 @@ export class MainPage implements AfterViewInit, OnDestroy {
       this.selectedItem()?.audioUri,
       this.scrollOffsetPx(),
       this.viewportHeightPx(),
-      this.itemHeight,
+      HISTORY_ROW_HEIGHT.player,
     );
   }
   protected toggleInline(): void {
@@ -359,11 +369,12 @@ export class MainPage implements AfterViewInit, OnDestroy {
 
 
   protected topIndex = 0; // index of top shown recording
-  protected itemHeight = 78;
-  protected itemGap = 0;
+  // Physical row heights are declared in the HistoryDisplayRow projection.
+  protected readonly rowHeights = HISTORY_ROW_HEIGHT;
 
   private player = viewChild(AudioPlayerComponent);
   private scrollViewport = viewChild(CdkVirtualScrollViewport);
+  private variableScroll = viewChild(HistoryVariableScrollDirective);
   private historyControls = viewChild(HistoryControlsComponent);
 
   constructor(
@@ -491,6 +502,7 @@ export class MainPage implements AfterViewInit, OnDestroy {
       this.resizeFrame = 0;
       const viewport = this.scrollViewport();
       viewport?.checkViewportSize();
+      this.variableScroll()?.strategy.checkViewport();
       this.viewportHeightPx.set(viewport?.getViewportSize() ?? 0);
       this.scrollOffsetPx.set(viewport?.measureScrollOffset('top') ?? 0);
     });
