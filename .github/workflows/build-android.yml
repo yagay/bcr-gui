@@ -37,6 +37,11 @@ jobs:
       - name: Install web dependencies
         run: npm ci
 
+      - name: Make legacy Capacitor 6 compatible with modern Android Gradle Plugin
+        # Only patch the downloaded dependency during CI; original source stays unchanged.
+        run: |
+          sed -i "s/proguard-android\\.txt/proguard-android-optimize.txt/g" node_modules/@capacitor/android/capacitor/build.gradle
+
       - name: Build original Angular UI
         run: npm run build
 
