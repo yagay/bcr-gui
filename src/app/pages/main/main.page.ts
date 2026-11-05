@@ -1,7 +1,6 @@
 import { CdkVirtualScrollViewport, ScrollingModule } from '@angular/cdk/scrolling';
-import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, inject, signal, untracked, viewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
 import { AudioPlayerComponent, SkipDirection } from '@app/components/audio-player/audio-player.component';
 import { CallIconComponent } from '@app/components/call-icon/call-icon.component';
 import { ActionButton, HeaderComponent } from '@app/components/header/header.component';
@@ -9,7 +8,6 @@ import { VirtualScrollbarComponent } from '@app/components/virtual-scrollbar/vir
 import { LongPressDirective } from '@app/directives/long-press.directive';
 import { Recording } from '@app/models/recording';
 import { DatetimePipe } from '@app/pipes/datetime.pipe';
-import { FilesizePipe } from '@app/pipes/filesize.pipe';
 import { toHms, ToHmsPipe } from '@app/pipes/to-hms.pipe';
 import { TranslatePipe } from '@app/pipes/translate.pipe';
 import { ContactsService } from '@app/services/contacts.service';
@@ -18,13 +16,10 @@ import { MessageBoxService } from '@app/services/message-box.service';
 import { RecordingsService } from '@app/services/recordings.service';
 import { DirectionFilter, RecordingListStore } from '@app/services/recording-list.store';
 import { SettingsService } from '@app/services/settings.service';
-import { filterList } from '@app/utils/filterList';
 import { getE164Number } from '@app/utils/phoneNumbers';
-import { sortRecordings } from '@app/utils/recordings-sorter';
-import { bringIntoView } from '@app/utils/scroll';
 import { untilTrue } from '@app/utils/waitForAsync';
 import { Clipboard } from '@capacitor/clipboard';
-import { ActionSheetController, IonButton, IonButtons, IonCard, IonCardContent, IonCardHeader, IonCardSubtitle, IonCardTitle, IonContent, IonFooter, IonIcon, IonList, IonLoading, IonRefresher, IonRefresherContent, IonSearchbar, IonToolbar, RefresherCustomEvent } from '@ionic/angular';
+import { ActionSheetController, IonButton, IonButtons, IonContent, IonFooter, IonIcon, IonList, IonLoading, IonRefresher, IonRefresherContent, IonSearchbar, IonToolbar, RefresherCustomEvent } from '@ionic/angular';
 import { AndroidSAF } from '@plugins/androidsaf';
 import { ErrorCode } from '@plugins/bcrgui';
 import version from '../../version';
@@ -38,16 +33,10 @@ import version from '../../version';
     AudioPlayerComponent,
     CallIconComponent,
     DatetimePipe,
-    FilesizePipe,
     FormsModule,
     HeaderComponent,
     IonButton,
     IonButtons,
-    IonCard,
-    IonCardContent,
-    IonCardHeader,
-    IonCardSubtitle,
-    IonCardTitle,
     IonContent,
     IonFooter,
     IonIcon,
@@ -90,11 +79,7 @@ export class MainPage implements AfterViewInit {
     },
   ];
   selectedItem = signal<Recording | undefined>(undefined);
-  selectedItemIndex = computed<number>(() => {
-    const item = this.selectedItem();
-    return this.items()?.findIndex(i => i === item) ?? -1;
-  });
-
+  private playRequest = 0;
   // show a progress for long actions
   protected progressMessage = signal<string|undefined>(undefined);
 
@@ -116,7 +101,6 @@ export class MainPage implements AfterViewInit {
   private i18n = inject(I18nService);
   private mbs = inject(MessageBoxService);
   protected recordingsService = inject(RecordingsService);
-  protected router = inject(Router);
   protected settings = inject(SettingsService);
 
   // constructor() {
@@ -262,10 +246,15 @@ export class MainPage implements AfterViewInit {
       this.listStore.toggle(item);
       return;
     }
+    const request = ++this.playRequest;
     this.selectedItem.set(item);
     this.cdr.detectChanges();
-    await untilTrue(() => this.player()?.recording() === item && !!this.player()?.isReady(), 100, 10000);
-    if (this.selectedItem() === item) await this.player()?.play();
+    try {
+      await untilTrue(() => this.player()?.recording() === item && !!this.player()?.isReady(), 100, 10000);
+      if (request === this.playRequest && this.selectedItem() === item) await this.player()?.play();
+    } catch (error) {
+      if (request === this.playRequest) console.error('Recording failed to become ready', error);
+    }
   }
 
   /** Single contextual action sheet, rather than actions spread through the row. */
@@ -298,6 +287,11 @@ export class MainPage implements AfterViewInit {
       confirmText: this.i18n.get('LBL_DELETE'),
       onConfirm: async () => {
         // forcibly unload audio
+        const deletingActive = items.some(i => i.audioUri === this.selectedItem()?.audioUri);
+        if (deletingActive) {
+          ++this.playRequest;
+          this.selectedItem.set(undefined);
+        }
         await this.player()?.unload();
         this.progressMessage.set(`0 / ${items.length}`);
         await this.recordingsService.deleteRecording(items, (deleted, total) => {
